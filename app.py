@@ -12,6 +12,141 @@ from supabase import create_client, Client
 from fpdf import FPDF
 from PIL import Image
 
+# --- RUTA SEGURA PARA DESARROLLO Y .EXE ---
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CLIENTES_DIR = os.path.join(BASE_DIR, "clientes")
+PERMISOS_FILE = os.path.join(BASE_DIR, "permisos_negocios.json")
+
+# Configuración inicial de la página web
+st.set_page_config(
+    page_title="ControlPRO ERP - Gestión Inteligente",
+    page_icon="📦",
+    layout="wide"
+)
+
+# Inicializar el estado de sesión para el administrador
+if "es_admin" not in st.session_state:
+    st.session_state["es_admin"] = False
+
+# --- PANEL DE DESARROLLADOR EN LA BARRA LATERAL ---
+with st.sidebar:
+    st.markdown("### 🛠️ Control Maestro")
+  
+    # Si ya inició sesión como admin, mostrar opciones y botón de salida
+    if st.session_state["es_admin"]:
+        st.success("✅ Modo Desarrollador Activo")
+        if st.button("🔒 Cerrar Sesión de Administrador"):
+            st.session_state["es_admin"] = False
+            st.rerun()
+           
+        st.divider()
+        st.markdown("#### ➕ Registrar Nuevo Cliente")
+      
+        with st.form("form_crear_cliente"):
+            id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+            nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+            password_cliente = st.text_input("Contraseña para el Cliente", type="password")
+            fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+          
+            st.markdown("*Habilitar Módulos:*")
+            m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
+            m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
+            m_inv = st.checkbox("📦 Inventario y Productos", value=True)
+            m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
+            m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
+            m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
+            m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
+            m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
+            m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
+            m_conf = st.checkbox("⚙️ Configuración General", value=True)
+            m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
+            m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
+          
+            guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
+          
+            if guardar:
+                if not id_negocio or not nombre_comercial:
+                    st.warning("⚠️ Debes completar el ID y el Nombre.")
+                else:
+                    datos_nuevo = {
+                        "nombre": nombre_comercial,
+                        "password": password_cliente,
+                        "fecha_expiracion": str(fecha_exp),
+                        "activo": True,
+                        "modulos": {
+                            "home": m_home,
+                            "dashboard": m_dash,
+                            "inventario": m_inv,
+                            "pos": m_pos,
+                            "compras": m_comp,
+                            "mermas": m_mermas,
+                            "informes": m_inf,
+                            "control_inventario": m_ctrl,
+                            "finanzas": m_fin,            
+                            "configuracion": m_conf,
+                            "cuadratura": m_cuad,
+                            "cobrar": m_cxp
+                        }
+                    }
+                  
+                    # guardar_nuevo_cliente(id_negocio, datos_nuevo)
+                    st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                    st.rerun()
+    else:
+        # Interruptor protegido para activar el modo desarrollador
+        modo_dev = st.toggle("Activar Modo Desarrollador")
+      
+        if modo_dev:
+            clave_dev = st.text_input("Contraseña de Desarrollador", type="password")
+          
+            if clave_dev == "SIMON1908":
+                st.session_state["es_admin"] = True
+                st.rerun()
+            else:
+                if clave_dev:
+                    st.error("❌ Contraseña incorrecta")
+
+# Estilo visual compacto y sin scroll
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 1.8rem;
+        color: #1E3A8A;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 0px;
+    }
+    .sub-title {
+        font-size: 0.95rem;
+        color: #4B5563;
+        text-align: center;
+        margin-bottom: 15px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- PANTALLA PRINCIPAL CONDICIONAL ---
+if st.session_state["es_admin"]:
+    st.markdown("### 📊 Panel de Control Maestro (Vista Administrador)")
+    # Aquí puedes mantener la visualización de la tabla de licencias
+else:
+    # Pantalla exclusiva para los clientes
+    st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
+   
+    with st.form("form_login_cliente"):
+        rut_cliente = st.text_input("Usuario / RUT:")
+        pass_cliente = st.text_input("Contraseña:", type="password")
+        submit_login = st.form_submit_button("🚀 Entrar al Sistema")
+       
+        if submit_login:
+            # Lógica para validar credenciales del cliente
+            pass
+
 def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf = FPDF(orientation='P', unit='mm', format='Letter')
     pdf.add_page()

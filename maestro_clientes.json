@@ -1,0 +1,50 @@
+{
+    "ENVIROTECH_URUGUAY": {
+        "nombre": "ENVIROTECH URUGUAY SAS",
+        "password": "operacion_uruguay",
+        "fecha_expiracion": "2026-09-03",
+        "activo": true,
+        "modulos": {
+            "home": true,
+            "dashboard": true,
+            "inventario": true,
+            "pos": true,
+            "compras": true,
+            "informes": true,
+            "control_inventario": true,
+            "configuracion": true
+        }
+    },
+    "GUTI_FRUIT": {
+        "nombre": "VERDULERIA GUTIFRUIT",
+        "password": "GUTIFRUIT",
+        "fecha_expiracion": "2026-12-31",
+        "activo": true,
+        "modulos": {
+            "home": true,
+            "dashboard": true,
+            "inventario": true,
+            "pos": true,
+            "compras": true,
+            "informes": true,
+            "control_inventario": true,
+            "configuracion": true
+        }
+    },
+    "BOTILLERIA_SAPIRON": {
+        "nombre": "BOTILLERIA SAPIRON",
+        "password": "sapi2026",
+        "fecha_expiracion": "2026-12-31",
+        "activo": true,
+        "modulos": {
+            "home": true,
+            "dashboard": true,
+            "inventario": true,
+            "pos": true,
+            "compras": true,
+            "informes": true,
+            "control_inventario": true,
+            "configuracion": true
+        }
+    }
+}

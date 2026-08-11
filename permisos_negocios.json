@@ -1,0 +1,47 @@
+{
+    "ENVIROTECH_URUGUAY": {
+        "\ud83c\udfe0 Home / Bienvenida": true,
+        "\ud83d\udcca Dashboard Ejecutivo": true,
+        "\ud83d\udce6 Inventario y Productos": true,
+        "\ud83d\udcb0 M\u00f3dulo de Ventas (POS)": true,
+        "\ud83d\uded2 Registrar Compra (CPP)": true,
+        "\ud83d\udcc8 Informes y Movimientos (Kardex)": true,
+        "\u26a0\ufe0f Control y Gesti\u00f3n de Inventario": true,
+        "\u2699\ufe0f Configuraci\u00f3n General": true
+    },
+    "GUTI_FRUIT": {
+        "\ud83c\udfe0 Home / Bienvenida": true,
+        "\ud83d\udcca Dashboard Ejecutivo": true,
+        "\ud83d\udce6 Inventario y Productos": true,
+        "\ud83d\udcb0 M\u00f3dulo de Ventas (POS)": true,
+        "\ud83d\uded2 Registrar Compra (CPP)": true,
+        "\ud83d\udcc8 Informes y Movimientos (Kardex)": true,
+        "\u26a0\ufe0f Control y Gesti\u00f3n de Inventario": true,
+        "\u2699\ufe0f Configuraci\u00f3n General": true
+    },
+    "BOTILLERIA_SAPIRON": {
+        "\ud83c\udfe0 Home / Bienvenida": true,
+        "\ud83d\udcca Dashboard Ejecutivo": true,
+        "\ud83d\udce6 Inventario y Productos": true,
+        "\ud83d\udcb0 M\u00f3dulo de Ventas (POS)": true,
+        "\ud83d\uded2 Registrar Compra (CPP)": true,
+        "\ud83d\udcc9 Mermas y Ajustes": true,
+        "\ud83d\udcc8 Informes y Movimientos (Kardex)": true,
+        "\u26a0\ufe0f Control y Gesti\u00f3n de Inventario": true,
+        "\u2699\ufe0f Configuraci\u00f3n General": true
+    },
+    "15382273-5": {
+        "\ud83c\udfe0 Home / Bienvenida": true,
+        "\ud83d\udcca Dashboard Ejecutivo": true,
+        "\ud83d\udce6 Inventario y Productos": true,
+        "\ud83d\udcb0 M\u00f3dulo de Ventas (POS)": true,
+        "\ud83d\uded2 Registrar Compra (CPP)": true,
+        "\ud83d\udcc9 Mermas y Ajustes": true,
+        "\ud83d\udcc8 Informes y Movimientos (Kardex)": true,
+        "\u26a0\ufe0f Control y Gesti\u00f3n de Inventario": true,
+        "\ud83d\udcca M\u00f3dulo de Finanzas": true,
+        "\ud83d\udcd2 Cuadratura Diaria": true,
+        "\ud83d\udcd1 Cuentas por Cobrar": true,
+        "\u2699\ufe0f Configuraci\u00f3n General": true
+    }
+}

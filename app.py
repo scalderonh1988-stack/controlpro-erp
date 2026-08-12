@@ -312,12 +312,10 @@ modulos_totales = [
     "⚙️ Configuración General"
 ]
 
-# Panel de Desarrollador Integrado (Edición de licencias + Creación de nuevos clientes)
+# Panel de Desarrollador Integrado
 if st.session_state.es_admin_dev:
     with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         st.success("✔️ Modo Desarrollador Activo")
-        
-        # Pestañas dentro del panel para organizar mejor
         tab_lic, tab_crear = st.tabs(["⚙️ Licencias", "➕ Crear Negocio"])
         
         with tab_lic:
@@ -360,7 +358,6 @@ if st.session_state.es_admin_dev:
                         }
                         guardar_nuevo_cliente(id_negocio, datos_nuevo)
                         
-                        # Crear su archivo de permisos por defecto
                         db_permisos = cargar_permisos()
                         db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
                         guardar_permisos(db_permisos)
@@ -368,7 +365,7 @@ if st.session_state.es_admin_dev:
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                         st.rerun()
 
-# Inicialización de estado de sesión para el menú
+# --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN (SOLUCIÓN DEL ERROR) ---
 if "menu_seleccionado" not in st.session_state:
     st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
 
@@ -383,6 +380,17 @@ if "estado_pago" not in st.session_state:
 
 if "ultimo_recibo" not in st.session_state:
     st.session_state.ultimo_recibo = None
+
+# 🛑 AQUÍ SE AÑADE LA VARIABLE QUE FALTABA Y CAUSABA EL ERROR EN CONFIGURACIÓN
+if "formas_pago_erp" not in st.session_state:
+    st.session_state.formas_pago_erp = [
+        "Efectivo",
+        "Tarjeta de Débito",
+        "Tarjeta de Crédito",
+        "Transferencia Electrónica",
+        "Cheque",
+        "Cuenta Corriente / Crédito Directo"
+    ]
 
 db_permisos_actual = cargar_permisos()
 permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {}) if not st.session_state.es_admin_dev else {mod: True for mod in modulos_totales}
@@ -431,7 +439,7 @@ def mostrar_encabezado_con_home(titulo_modulo):
             st.rerun()
 
 
-# --- 7. RENDERIZADO DEL HOME FIJO Y MÓDULOS ---
+# --- 8. RENDERIZADO DEL HOME FIJO Y MÓDULOS ---
 if menu == "🏠 Home / Bienvenida":
     st.markdown(f"<p class='main-title'>🪙 ControlPRO ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Selecciona un módulo para comenzar:</p>", unsafe_allow_html=True)
@@ -1725,7 +1733,7 @@ PAGO: {forma_pago.upper()}
             with st.form("form_agregar_item"):
                 col_cant, col_precio_input = st.columns(2)
                 with col_cant:
-                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=0.1, value=1.0, format="%.2f")
+                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, format="%.2f")
                 with col_precio_input:
                     precio_venta = st.number_input("Precio Unitario ($)", min_value=0.0, step=1.0, value=float(st.session_state.precio_actual_input))
 

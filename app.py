@@ -12,105 +12,14 @@ from supabase import create_client, Client
 from fpdf import FPDF
 from PIL import Image
 
-# --- RUTA SEGURA PARA DESARROLLO Y .EXE ---
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-CLIENTES_DIR = os.path.join(BASE_DIR, "clientes")
-PERMISOS_FILE = os.path.join(BASE_DIR, "permisos_negocios.json")
-
-# Configuración inicial de la página web
+# ⚙️ 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE LO PRIMERO)
 st.set_page_config(
     page_title="ControlPRO ERP - Gestión Inteligente",
     page_icon="📦",
     layout="wide"
 )
 
-# Inicializar el estado de sesión para el administrador
-if "es_admin" not in st.session_state:
-    st.session_state["es_admin"] = False
-
-# --- PANEL DE DESARROLLADOR EN LA BARRA LATERAL ---
-with st.sidebar:
-    st.markdown("### 🛠️ Control Maestro")
-  
-    # Si ya inició sesión como admin, mostrar opciones y botón de salida
-    if st.session_state["es_admin"]:
-        st.success("✅ Modo Desarrollador Activo")
-        if st.button("🔒 Cerrar Sesión de Administrador"):
-            st.session_state["es_admin"] = False
-            st.rerun()
-           
-        st.divider()
-        st.markdown("#### ➕ Registrar Nuevo Cliente")
-      
-        with st.form("form_crear_cliente"):
-            id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-            nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-            password_cliente = st.text_input("Contraseña para el Cliente", type="password")
-            fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
-          
-            st.markdown("*Habilitar Módulos:*")
-            m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
-            m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
-            m_inv = st.checkbox("📦 Inventario y Productos", value=True)
-            m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
-            m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
-            m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
-            m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
-            m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
-            m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
-            m_conf = st.checkbox("⚙️ Configuración General", value=True)
-            m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
-            m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
-          
-            guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
-          
-            if guardar:
-                if not id_negocio or not nombre_comercial:
-                    st.warning("⚠️ Debes completar el ID y el Nombre.")
-                else:
-                    datos_nuevo = {
-                        "nombre": nombre_comercial,
-                        "password": password_cliente,
-                        "fecha_expiracion": str(fecha_exp),
-                        "activo": True,
-                        "modulos": {
-                            "home": m_home,
-                            "dashboard": m_dash,
-                            "inventario": m_inv,
-                            "pos": m_pos,
-                            "compras": m_comp,
-                            "mermas": m_mermas,
-                            "informes": m_inf,
-                            "control_inventario": m_ctrl,
-                            "finanzas": m_fin,            
-                            "configuracion": m_conf,
-                            "cuadratura": m_cuad,
-                            "cobrar": m_cxp
-                        }
-                    }
-                  
-                    # guardar_nuevo_cliente(id_negocio, datos_nuevo)
-                    st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
-                    st.rerun()
-    else:
-        # Interruptor protegido para activar el modo desarrollador
-        modo_dev = st.toggle("Activar Modo Desarrollador")
-      
-        if modo_dev:
-            clave_dev = st.text_input("Contraseña de Desarrollador", type="password")
-          
-            if clave_dev == "SIMON1908":
-                st.session_state["es_admin"] = True
-                st.rerun()
-            else:
-                if clave_dev:
-                    st.error("❌ Contraseña incorrecta")
-
-# Estilo visual compacto y sin scroll
+# Estilo visual general
 st.markdown("""
     <style>
     .main-title {
@@ -126,42 +35,57 @@ st.markdown("""
         text-align: center;
         margin-bottom: 15px;
     }
+    .ticket-box {
+        background-color: #1F2937;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px dashed #3B82F6;
+        color: #F3F4F6;
+        font-family: monospace;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- PANTALLA PRINCIPAL CONDICIONAL ---
-if st.session_state["es_admin"]:
-    st.markdown("### 📊 Panel de Control Maestro (Vista Administrador)")
-    # Aquí puedes mantener la visualización de la tabla de licencias
+# --- 2. RUTAS Y CARPETAS GLOBALES (DEFINIDAS AL INICIO PARA EVITAR ERRORES) ---
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
 else:
-    # Pantalla exclusiva para los clientes
-    st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
-   
-    with st.form("form_login_cliente"):
-        rut_cliente = st.text_input("Usuario / RUT:")
-        pass_cliente = st.text_input("Contraseña:", type="password")
-        submit_login = st.form_submit_button("🚀 Entrar al Sistema")
-       
-        if submit_login:
-            # Lógica para validar credenciales del cliente
-            pass
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+CLIENTES_DIR = os.path.join(BASE_DIR, "clientes")
+CARPETA_CLIENTES = CLIENTES_DIR
+PERMISOS_FILE = os.path.join(BASE_DIR, "permisos_negocios.json")
+
+if not os.path.exists(CLIENTES_DIR):
+    os.makedirs(CLIENTES_DIR)
+
+negocios_disponibles = [d for d in os.listdir(CLIENTES_DIR) if os.path.isdir(os.path.join(CLIENTES_DIR, d))]
+if not negocios_disponibles:
+    negocio_default = "negocio_1"
+    os.makedirs(os.path.join(CLIENTES_DIR, negocio_default), exist_ok=True)
+    negocios_disponibles = [negocio_default]
+
+# 🔌 Conexión a Supabase usando st.secrets
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["key"]
+supabase: Client = create_client(url, key)
+
+resultado = supabase.table("empresas").select("*").execute()
+empresas_data = resultado.data
+
+PROVEEDORES_FILE = os.path.join(CLIENTES_DIR, "maestro_proveedores.xlsx")
+
+
+# --- 3. FUNCIONES DE UTILIDAD Y MÓDULOS ---
 def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf = FPDF(orientation='P', unit='mm', format='Letter')
     pdf.add_page()
   
-    # 📁 Obtener la carpeta del negocio seleccionado de forma limpia
     negocio_actual = str(st.session_state.get('negocio_seleccionado', '')).strip()
     tenant_dir = os.path.join(CARPETA_CLIENTES, negocio_actual) if negocio_actual else ""
-  
-    # 🖨️ Depuración para verificar en la terminal de VS Code qué ruta está buscando
-    print(f"DEBUG PDF -> Negocio: '{negocio_actual}' | Ruta carpeta: '{tenant_dir}'")
 
-    # 🖼️ Cargar logo si existe en la carpeta del negocio
     if tenant_dir:
         ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
-        # Solución para Windows: reemplazar '\' por '/'
         ruta_logo_fpdf = ruta_logo.replace('\\', '/')
         
         if os.path.exists(ruta_logo):
@@ -169,12 +93,7 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
                 pdf.image(ruta_logo_fpdf, x=10, y=8, w=25)
             except Exception as e:
                 print(f"Error al cargar el logo en el PDF: {e}")
-        else:
-            print(f"El archivo logo_empresa.png no se encontró en la ruta: {ruta_logo}")
-    else:
-        print(f"La carpeta del negocio no es válida: {tenant_dir}")
 
-    # ⚙️ Cargar configuración desde el archivo JSON del negocio
     cfg = {}
     if tenant_dir:
         ruta_config_json = os.path.join(tenant_dir, "config_ticket.json")
@@ -192,7 +111,6 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     rut_empresa = cfg.get('rut_empresa') or 'Sin RUT'
     direccion_empresa = cfg.get('direccion') or 'Sin Dirección'
    
-    # 🏢 Encabezado del documento
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 6, str(nombre_empresa), ln=True, align='C')
     pdf.set_font("Arial", '', 9)
@@ -204,7 +122,6 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(0, 8, "GUÍA DE DESPACHO ELECTRÓNICA", ln=True, align='C')
     pdf.ln(5)
    
-    # Datos del cliente
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(0, 6, "DATOS DEL CLIENTE", ln=True)
     pdf.set_font("Arial", '', 10)
@@ -212,7 +129,6 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(60, 6, f"RUT: {cliente_rut}", border=1, ln=True)
     pdf.ln(5)
    
-    # Tabla de productos
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(85, 8, "Descripción", border=1, align='C')
     pdf.cell(20, 8, "Cant.", border=1, align='C')
@@ -239,19 +155,6 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
    
     return pdf.output(dest='S')
 
-# 🔌 Conexión a Supabase usando st.secrets
-url = st.secrets["supabase"]["url"]
-key = st.secrets["supabase"]["key"]
-supabase: Client = create_client(url, key)
-
-# 📊 Consultar los datos de la tabla empresas
-resultado = supabase.table("empresas").select("*").execute()
-empresas_data = resultado.data
-# 🖥️ Mostrar los datos en la aplicación
-st.dataframe(empresas_data)
-
-# Define la ruta para el archivo maestro de proveedores
-PROVEEDORES_FILE = os.path.join("clientes", "maestro_proveedores.xlsx") # O en la ruta de tu negocio
 
 def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     if st.button("⬅️ Volver al Home", use_container_width=True):
@@ -265,7 +168,6 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
         return
 
     df_cxp = pd.read_excel(archivo_cxp)
-  
     cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
   
     df_filtrado = df_cxp.copy()
@@ -285,27 +187,24 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
        
         if st.button("✅ Registrar Abono", use_container_width=True):
             if monto_abono > 0:
-                # Filtramos el registro del cliente seleccionado
                 idx = df_cxp[df_cxp["Cliente"] == cliente_seleccionado].index[0]
                 saldo_actual = df_cxp.loc[idx, "SaldoPendiente"]
               
                 if monto_abono >= saldo_actual:
-                    # Si el abono cubre o supera la deuda, eliminamos el registro
                     df_cxp = df_cxp.drop(idx)
                     st.success(f"🎉 Deuda saldada por completo para {cliente_seleccionado}.")
                 else:
-                    # Si es un abono parcial, restamos al saldo pendiente
                     df_cxp.loc[idx, "SaldoPendiente"] -= monto_abono
                     df_cxp.loc[idx, "Abono"] += monto_abono
                     st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
               
-                # Guardamos los cambios en el archivo Excel
                 df_cxp.to_excel(archivo_cxp, index=False)
                 st.rerun()
             else:
                 st.warning("⚠️ Ingresa un monto mayor a cero.")
     else:
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
+
 
 def cargar_maestro_proveedores(ruta_negocio):
     archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
@@ -314,40 +213,9 @@ def cargar_maestro_proveedores(ruta_negocio):
         df_ini.to_excel(archivo_prov, index=False)
     return pd.read_excel(archivo_prov)
 
-def guardar_nuevo_proveedor(ruta_negocio, nombre, rut="", contacto="", telefono="", email=""):
-    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
-    df_prov = cargar_maestro_proveedores(ruta_negocio)
-    
-    # Evitar duplicados exactos por nombre
-    nombre_limpio = str(nombre).strip().upper()
-    if not df_prov.empty and nombre_limpio in df_prov['Nombre_Proveedor'].str.upper().values:
-        return # Ya existe
-        
-    nuevo = pd.DataFrame([{
-        'Nombre_Proveedor': nombre.strip(),
-        'Rut': rut,
-        'Contacto': contacto,
-        'Telefono': telefono,
-        'Email': email
-    }])
-    
-    df_actualizado = pd.concat([df_prov, nuevo], ignore_index=True)
-    df_actualizado.to_excel(archivo_prov, index=False)
-
-def mostrar_maestro_proveedores(ruta_negocio):
-    st.markdown("### 📇 Directorio de Proveedores Registrados")
-    df_proveedores = cargar_maestro_proveedores(ruta_negocio)
-    
-    if df_proveedores.empty:
-        st.info("ℹ️ No hay proveedores registrados todavía.")
-    else:
-        st.dataframe(df_proveedores, use_container_width=True)
-# --- MÓDULOS INTEGRADOS DIRECTAMENTE EN APP.PY ---
 
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
-    st.markdown("Administra y registra las facturas pendientes de tus proveedores. Cambia el estado a 'Pagado' cuando saldes la deuda.")
-
     archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
 
     if not os.path.exists(archivo_cuentas):
@@ -367,8 +235,7 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
                 f_emision = st.date_input("Fecha de Emisión", value=date.today())
                 f_venc = st.date_input("Fecha de Vencimiento", value=date.today())
            
-            btn_guardar_cuenta = st.form_submit_button("💾 Guardar Factura Pendiente")
-            if btn_guardar_cuenta:
+            if st.form_submit_button("💾 Guardar Factura Pendiente"):
                 if not prov_m or not num_fac_m or monto_m <= 0:
                     st.warning("⚠️ Completa todos los campos obligatorios y un monto mayor a 0.")
                 else:
@@ -380,56 +247,17 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
                         'Monto_Total': monto_m,
                         'Estado': 'PENDIENTE'
                     }])
-                    df_actualizado = pd.concat([df_cuentas, nueva_fila], ignore_index=True)
-                    df_actualizado.to_excel(archivo_cuentas, index=False)
+                    pd.concat([df_cuentas, nueva_fila], ignore_index=True).to_excel(archivo_cuentas, index=False)
                     st.success("✅ ¡Factura registrada correctamente!")
                     st.rerun()
 
-    st.divider()
-    df_cuentas = pd.read_excel(archivo_cuentas)
-
-    if df_cuentas.empty:
-        st.info("ℹ️ No hay cuentas por pagar registradas.")
-    else:
-        df_pendientes = df_cuentas[df_cuentas['Estado'].astype(str).str.upper() == 'PENDIENTE']
-        deuda_total_pendiente = df_pendientes['Monto_Total'].sum() if not df_pendientes.empty else 0.0
-
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.metric(label="🔥 Deuda Total Pendiente", value=f"${deuda_total_pendiente:,.2f}")
-        with col_m2:
-            st.metric(label="📄 Total Documentos Registrados", value=len(df_cuentas))
-
-        st.divider()
-        st.markdown("#### 📂 Listado General de Cuentas")
-
-        for idx, row in df_cuentas.iterrows():
-            estado_actual = str(row.get('Estado', 'PENDIENTE')).upper()
-            es_pendiente = estado_actual == 'PENDIENTE'
-
-            c_info, c_action = st.columns([8, 2])
-            with c_info:
-                st.info(f"🏢 **{row.get('Proveedor', '')}** | Fac: **{row.get('Numero_Factura', '')}** | Emisión: {row.get('Fecha_Emision', '')} | Vence: **{row.get('Fecha_Vencimiento', '')}** | Monto: **${float(row.get('Monto_Total', 0)):,.2f}** | Estado: **{estado_actual}**")
-           
-            with c_action:
-                if es_pendiente:
-                    if st.button("✅ Marcar Pagado", key=f"pagar_cta_{idx}", type="primary"):
-                        df_cuentas.at[idx, 'Estado'] = 'PAGADO'
-                        df_cuentas.to_excel(archivo_cuentas, index=False)
-                        st.success(f"🎉 ¡Factura marcada como Pagada!")
-                        st.rerun()
-                else:
-                    st.success("✔ Pagado")
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
 
     if not os.path.exists(archivo_cuadratura):
-        df_ini = pd.DataFrame(columns=[
-            'Fecha', 'Efectivo', 'Transferencia', 'Debito',
-            'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones'
-        ])
+        df_ini = pd.DataFrame(columns=['Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones'])
         df_ini.to_excel(archivo_cuadratura, index=False)
 
     df_cuadratura = pd.read_excel(archivo_cuadratura)
@@ -460,7 +288,8 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             pd.concat([df_cuadratura, nuevo], ignore_index=True).to_excel(archivo_cuadratura, index=False)
             st.success("✅ ¡Cuadratura guardada con éxito!")
             st.rerun()
-            
+
+
 def mostrar_modulo_registro_gastos(ruta_negocio):
     st.markdown("### 📋 Registro y Control de Gastos")
     archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
@@ -480,7 +309,7 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
         with col_g2:
             metodo_pago = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Crédito", "Cheque"])
             monto_gasto = st.number_input("Monto Total del Gasto ($)", min_value=0.0, step=100.0, value=0.0)
-           
+          
         doc_gasto = st.text_input("Documento Asociado (ej. Factura 123, Boleta)", value="Sin Documento")
         submitted_gasto = st.form_submit_button("Guardar Gasto")
 
@@ -517,7 +346,6 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
         st.divider()
         st.markdown("#### 📂 Historial de Gastos y Egresos")
 
-        # Cabeceras de la tabla con proporciones optimizadas
         h1, h2, h3, h4, h5, h6 = st.columns([3, 2, 2, 2, 2, 1])
         with h1: st.markdown("**Descripción**")
         with h2: st.markdown("**Categoría**")
@@ -545,7 +373,6 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
 
             m_val = float(row.get('Monto', 0)) if pd.notna(row.get('Monto', 0)) else 0.0
 
-            # Filas alineadas exactamente debajo de cada cabecera con su botón al lado
             c1, c2, c3, c4, c5, c6 = st.columns([3, 2, 2, 2, 2, 1])
             with c1: st.write(d_val)
             with c2: st.write(c_val)
@@ -560,160 +387,24 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
                     st.rerun()
 
 
-# --- RUTA SEGURA PARA DESARROLLO Y .EXE ---
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-CLIENTES_DIR = os.path.join(BASE_DIR, "clientes")
-PERMISOS_FILE = os.path.join(BASE_DIR, "permisos_negocios.json")
-# Configuración inicial de la página web
-st.set_page_config(
-    page_title="ControlPRO ERP - Gestión Inteligente",
-    page_icon="📦",
-    layout="wide"
-)
-
-# --- PANEL DE DESARROLLADOR EN LA BARRA LATERAL ---
-with st.sidebar:
-    st.markdown("### 🛠️ Control Maestro")
-   
-    # Interruptor protegido para activar el modo desarrollador
-    modo_dev = st.toggle("Activar Modo Desarrollador")
-   
-    if modo_dev:
-        clave_dev = st.text_input("Contraseña de Desarrollador", type="password")
-       
-        # Define aquí tu clave secreta maestra
-        if clave_dev == "SIMON1908": # Puedes cambiar esta contraseña cuando quieras
-            st.success("✅ Modo Desarrollador Activo")
-            st.divider()
-           
-            st.markdown("#### ➕ Registrar Nuevo Cliente")
-           
-            with st.form("form_crear_cliente"):
-                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-                password_cliente = st.text_input("Contraseña para el Cliente", type="password")
-                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
-               
-                st.markdown("*Habilitar Módulos:*")
-                m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
-                m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
-                m_inv = st.checkbox("📦 Inventario y Productos", value=True)
-                m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
-                m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
-                m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
-                m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
-                m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
-                m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
-                m_conf = st.checkbox("⚙️ Configuración General", value=True)
-                m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
-                m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
-               
-                guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
-               
-                if guardar:
-                    if not id_negocio or not nombre_comercial:
-                        st.warning("⚠️ Debes completar el ID y el Nombre.")
-                    else:
-                        datos_nuevo = {
-                            "nombre": nombre_comercial,
-                            "password": password_cliente,
-                            "fecha_expiracion": str(fecha_exp),
-                            "activo": True,
-                            "modulos": {
-                                "home": m_home,
-                                "dashboard": m_dash,
-                                "inventario": m_inv,
-                                "pos": m_pos,
-                                "compras": m_comp,
-                                "informes": m_inf,
-                                "control_inventario": m_ctrl,
-                                "finanzas": m_fin,             
-                                "configuracion": m_conf,  # <-- Coma añadida aquí
-                                "cuadratura": m_cuad,
-                                "cobrar": m_cxp
-                            }
-                        } # <-- Llave de cierre del diccionario principal
-                       
-                        guardar_nuevo_cliente(id_negocio, datos_nuevo)
-                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
-                        st.rerun()
-        else:
-            if clave_dev:
-                st.error("❌ Contraseña incorrecta")
-
-
-# Estilo visual compacto y sin scroll para el Home
-st.markdown("""
-    <style>
-    .main-title {
-        font-size: 1.8rem;
-        color: #1E3A8A;
-        text-align: center;
-        font-weight: bold;
-        margin-bottom: 0px;
-    }
-    .sub-title {
-        font-size: 0.95rem;
-        color: #4B5563;
-        text-align: center;
-        margin-bottom: 15px;
-    }
-    .ticket-box {
-        background-color: #1F2937;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px dashed #3B82F6;
-        color: #F3F4F6;
-        font-family: monospace;
-    }
-    .btn-link-tab {
-        display: inline-block;
-        padding: 0.5rem 1rem;
-        background-color: #2563EB;
-        color: white !important;
-        text-align: center;
-        border-radius: 0.375rem;
-        text-decoration: none;
-        font-weight: 500;
-        width: 100%;
-    }
-    .btn-link-tab:hover {
-        background-color: #1D4ED8;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ----------------- GESTIÓN DE CARPETAS Y MULTINEGOCIO -----------------
-CARPETA_CLIENTES = os.path.join(BASE_DIR, "clientes")
-if not os.path.exists(CARPETA_CLIENTES):
-    os.makedirs(CARPETA_CLIENTES)
-
-negocios_disponibles = [d for d in os.listdir(CARPETA_CLIENTES) if os.path.isdir(os.path.join(CARPETA_CLIENTES, d))]
-if not negocios_disponibles:
-    negocio_default = "negocio_1"
-    os.makedirs(os.path.join(CARPETA_CLIENTES, negocio_default), exist_ok=True)
-    negocios_disponibles = [negocio_default]
-
-# ----------------- SISTEMA DE AUTENTICACIÓN INTELIGENTE -----------------
+# --- 4. SISTEMA DE AUTENTICACIÓN INTELIGENTE UNIFICADO ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "negocio_actual" not in st.session_state:
     st.session_state.negocio_actual = None
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
+if "es_admin_dev" not in st.session_state:
+    st.session_state.es_admin_dev = False
 
 if not st.session_state.autenticado:
     st.markdown('<p class="main-title">🔐 ControlPRO ERP - Acceso Unificado</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-title">Ingresa tus credenciales para acceder a tu negocio</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Ingresa tus credenciales para acceder al sistema</p>', unsafe_allow_html=True)
  
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
-        with st.form("form_login_automatico"):
-            usuario_input = st.text_input("👤 Usuario / RUT:")
+        with st.form("form_login_unificado"):
+            usuario_input = st.text_input("👤 Usuario / RUT / Admin:")
             password_input = st.text_input("🔑 Contraseña:", type="password")
          
             btn_ingresar = st.form_submit_button("🚀 Entrar al Sistema", use_container_width=True)
@@ -722,60 +413,72 @@ if not st.session_state.autenticado:
             usuario_limpio = usuario_input.strip()
             password_limpio = password_input.strip()
           
-            # 🔒 Validar que los campos no estén vacíos
             if not usuario_limpio or not password_limpio:
                 st.error("❌ Debes ingresar tanto el usuario como la contraseña.")
             else:
-                # 🏢 Búsqueda del RUT en Supabase
-                empresa_encontrada = next((emp for emp in empresas_data if emp["rut_empresa"] == usuario_limpio), None)
-
-                if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
-                    negocio_asignado = usuario_limpio
-                    os.makedirs(os.path.join(CARPETA_CLIENTES, negocio_asignado), exist_ok=True)
-                  
+                # 🛠️ 1. Validación de Administrador / Desarrollador Maestro
+                if usuario_limpio.lower() in ["admin", "desarrollador", "simon"] and password_limpio == "SIMON1908":
                     st.session_state.autenticado = True
-                    st.session_state.negocio_actual = negocio_asignado
-                    st.session_state.usuario_logueado = usuario_input
-                    st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
-                    st.success(f"🏠 ¡Bienvenido! Ingresando a {negocio_asignado.upper()}...")
+                    st.session_state.es_admin_dev = True
+                    st.session_state.usuario_logueado = "Administrador Master"
+                    st.session_state.negocio_actual = "admin_general"
+                    st.session_state.nombre_empresa = "ControlPRO Master"
+                    st.success("🛠️ ¡Bienvenido Maestro! Accediendo al entorno completo...")
                     st.rerun()
                 else:
-                    st.error("❌ RUT no registrado o licencia inactiva.")
+                    # 🏢 2. Validación para Clientes en Supabase
+                    empresa_encontrada = next((emp for emp in empresas_data if emp["rut_empresa"] == usuario_limpio), None)
+
+                    if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
+                        negocio_asignado = usuario_limpio
+                        os.makedirs(os.path.join(CLIENTES_DIR, negocio_asignado), exist_ok=True)
+                      
+                        st.session_state.autenticado = True
+                        st.session_state.es_admin_dev = False
+                        st.session_state.negocio_actual = negocio_asignado
+                        st.session_state.usuario_logueado = usuario_input
+                        st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
+                        st.success(f"🏠 ¡Bienvenido! Ingresando al Home de {str(st.session_state.nombre_empresa).upper()}...")
+                        st.rerun()
+                    else:
+                        st.error("❌ Credenciales incorrectas o licencia inactiva.")
     st.stop()
 
-# Recuperamos los datos del negocio autenticado de forma segura
-negocio_seleccionado = st.session_state.get("negocio_actual", None)
 
-if negocio_seleccionado:
+# --- 5. CONFIGURACIÓN DE RUTAS Y ARCHIVOS DEL NEGOCIO ACTIVO ---
+negocio_seleccionado = st.session_state.get("negocio_actual", None)
+if negocio_seleccionado and negocio_seleccionado != "admin_general":
     ruta_negocio = os.path.join(CLIENTES_DIR, str(negocio_seleccionado))
     os.makedirs(ruta_negocio, exist_ok=True)
-    # Buscamos de forma flexible cualquier archivo base que comience por BASE DE DATOS
     archivos_en_carpeta = os.listdir(ruta_negocio)
     archivo_base = next((os.path.join(ruta_negocio, f) for f in archivos_en_carpeta if f.startswith("BASE DE DATOS")), os.path.join(ruta_negocio, "BASE DE DATOS.xlsx"))
     archivo_compras = next((os.path.join(ruta_negocio, f) for f in archivos_en_carpeta if f.startswith("Libro_Compras")), os.path.join(ruta_negocio, "Libro_Compras.xlsx"))
+else:
+    ruta_negocio = CLIENTES_DIR
+    archivo_base = None
+    archivo_compras = None
 
-# Botón de Cerrar Sesión en la Barra Lateral
+
+# --- 6. BARRA LATERAL Y GESTIÓN DE PERMISOS ---
 st.sidebar.markdown(f"👤 Usuario: **{st.session_state.usuario_logueado}**")
 st.sidebar.markdown(f"🏢 Negocio: *{st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'NINGUNO'}*")
 if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.autenticado = False
     st.session_state.negocio_actual = None
     st.session_state.usuario_logueado = None
+    st.session_state.es_admin_dev = False
     st.rerun()
 
 st.sidebar.divider()
 
-# ----------------- GESTIÓN DE LICENCIAS Y PERMISOS (PANEL DEV) -----------------
-archivo_permisos = "permisos_negocios.json"
-
 def cargar_permisos():
-    if os.path.exists(archivo_permisos):
-        with open(archivo_permisos, "r") as f:
+    if os.path.exists(PERMISOS_FILE):
+        with open(PERMISOS_FILE, "r") as f:
             return json.load(f)
     return {}
 
 def guardar_permisos(datos):
-    with open(archivo_permisos, "w") as f:
+    with open(PERMISOS_FILE, "w") as f:
         json.dump(datos, f, indent=4)
 
 modulos_totales = [
@@ -793,10 +496,8 @@ modulos_totales = [
     "⚙️ Configuración General"
 ]
 
-# Panel de Desarrollador en la Barra Lateral
-with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
-    clave_dev = st.text_input("Clave Maestro Dev:", type="password", key="input_dev_key")
-    if clave_dev == "SIMON1908":
+if st.session_state.es_admin_dev:
+    with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         st.success("✔️ Modo Desarrollador Activo")
         negocio_a_modificar = st.selectbox("Selecciona Negocio a Configurar:", negocios_disponibles, key="sel_dev_negocio")
        
@@ -804,7 +505,6 @@ with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         if negocio_a_modificar not in db_permisos:
             db_permisos[negocio_a_modificar] = {mod: True for mod in modulos_totales}
        
-        st.markdown(f"**Editando accesos para: {negocio_a_modificar}**")
         with st.form(f"form_licencia_{negocio_a_modificar}"):
             permisos_temporales = {}
             for mod in modulos_totales:
@@ -816,6 +516,26 @@ with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
                 guardar_permisos(db_permisos)
                 st.success("✅ ¡Licencia actualizada!")
                 st.rerun()
+
+if "menu_seleccionado" not in st.session_state:
+    st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
+
+db_permisos_actual = cargar_permisos()
+permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {}) if not st.session_state.es_admin_dev else {mod: True for mod in modulos_totales}
+
+lista_modulos_permitidos = [
+    mod for mod in modulos_totales if permisos_del_negocio.get(mod, True)
+]
+
+if not lista_modulos_permitidos:
+    lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
+
+menu = st.sidebar.selectbox(
+    "🧭 Selecciona un Módulo:",
+    lista_modulos_permitidos,
+    index=lista_modulos_permitidos.index(st.session_state.menu_seleccionado) if st.session_state.menu_seleccionado in lista_modulos_permitidos else 0
+)
+st.session_state.menu_seleccionado = menu
 
 # ----------------- INICIALIZACIÓN DE LA MEMORIA DE SESIÓN -----------------
 if "menu_seleccionado" not in st.session_state:
@@ -855,7 +575,6 @@ if "config_ticket" not in st.session_state:
 query_params = st.query_params
 param_caja = query_params.get("caja", None)
 
-# Filtrado dinámico de módulos según el archivo de permisos del negocio
 db_permisos_actual = cargar_permisos()
 permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {})
 
@@ -877,7 +596,6 @@ st.session_state.menu_seleccionado = menu
 def cargar_datos(path_db):
     if os.path.exists(path_db):
         df = pd.read_excel(path_db, dtype={'Código': str})
-        # Filtramos para mantener solo los productos activos en el POS
         if 'Activo' in df.columns:
             df = df[df['Activo'].astype(str).str.strip().str.capitalize() == 'Si']
         return df
@@ -888,7 +606,6 @@ df_base = cargar_datos(archivo_base) if ('archivo_base' in globals() and archivo
 def mostrar_encabezado_con_home(titulo_modulo):
     col_titulo, col_btn = st.columns([4, 1])
     with col_titulo:
-        # 🏢 Usamos el nombre de la empresa de la sesión
         nombre_mostrar = st.session_state.get('nombre_empresa', negocio_seleccionado)
         st.subheader(f"{titulo_modulo} (Negocio: {nombre_mostrar})")
     with col_btn:
@@ -906,7 +623,6 @@ if menu == "🏠 Home / Bienvenida":
     st.markdown(f"<p class='main-title'>🪙 ControlPRO ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Selecciona un módulo para comenzar:</p>", unsafe_allow_html=True)
 
-    # 1. Definimos los módulos con una clave única de identificación y sus nombres reales en los permisos
     modulos_disponibles_home = [
         {"id": "dash", "nombre_ref": "Dashboard Ejecutivo", "label": "📊 Dashboard Ejecutivo"},
         {"id": "inv", "nombre_ref": "Inventario y Productos", "label": "📦 Inventario y Productos"},
@@ -921,18 +637,14 @@ if menu == "🏠 Home / Bienvenida":
         {"id": "conf", "nombre_ref": "Configuración General", "label": "⚙️ Configuración General"}
     ]
 
-    # 2. Verificamos contra la lista permitida contemplando posibles variaciones con emojis
     botones_activos = []
     for mod in modulos_disponibles_home:
-        # Comprobamos si el nombre de referencia o alguna variante con emoji está en los permisos permitidos
         permitido = any(mod["nombre_ref"].lower() in str(p).lower() for p in lista_modulos_permitidos)
         if permitido:
             botones_activos.append(mod)
 
-    # 3. Dibujamos dinámicamente en filas de 2 columnas alineadas perfectamente
     if botones_activos:
         num_columnas = 2
-       
         for i in range(0, len(botones_activos), num_columnas):
             fila_mods = botones_activos[i:i + num_columnas]
             cols = st.columns(num_columnas)
@@ -940,7 +652,6 @@ if menu == "🏠 Home / Bienvenida":
             for idx_col, mod in enumerate(fila_mods):
                 with cols[idx_col]:
                     if st.button(mod["label"], use_container_width=True, key=f"btn_home_{mod['id']}"):
-                        # Buscamos el nombre exacto correspondiente en los permisos para redirigir bien
                         nombre_destino = next((p for p in lista_modulos_permitidos if mod["nombre_ref"].lower() in str(p).lower()), mod["nombre_ref"])
                         st.session_state.menu_seleccionado = nombre_destino
                         st.rerun()
@@ -964,16 +675,16 @@ elif menu == "📊 Dashboard Ejecutivo":
 
     retiro_diario = total_ventas_historico * 0.10
 
-    # Cálculos financieros del inventario
     if df_base is not None and not df_base.empty:
         df_base['Costo'] = pd.to_numeric(df_base['Costo'], errors='coerce').fillna(0)
         df_base['Precio de Venta'] = pd.to_numeric(df_base['Precio de Venta'], errors='coerce').fillna(0)
-        df_base['Stock'] = pd.to_numeric(df_base['Stock'], errors='coerce').fillna(0) # Ajusta 'Stock' si tu columna tiene otro nombre exacto
+        df_base['Stock'] = pd.to_numeric(df_base['Stock'], errors='coerce').fillna(0)
 
         inversion_total = (df_base['Costo'] * df_base['Stock']).sum()
         valor_venta_total = (df_base['Precio de Venta'] * df_base['Stock']).sum()
         ganancia_potencial = valor_venta_total - inversion_total
-    else: inversion_total = valor_venta_total = ganancia_potencial = 0.0
+    else: 
+        inversion_total = valor_venta_total = ganancia_potencial = 0.0
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -986,7 +697,6 @@ elif menu == "📊 Dashboard Ejecutivo":
     with col4:
         st.metric(label="🚨 Alertas de Quiebre", value="0", delta="Estable")
 
-# 📉 Resumen Financiero del Inventario
     col_inv1, col_inv2, col_inv3 = st.columns(3)
     with col_inv1:
         st.metric(label="📉 Inversión Total (Costo)", value=f"${inversion_total:,.2f}")

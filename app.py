@@ -638,6 +638,11 @@ if st.session_state.es_admin_dev:
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                         st.rerun()
 
+# 📌 Créditos al desarrollador en el footer de la barra lateral
+st.sidebar.markdown("---")
+st.sidebar.markdown("© 2026 ControlPRO ERP")
+st.sidebar.markdown("Desarrollado por **Sebastián Calderón**")
+
 # --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN ---
 if "menu_seleccionado" not in st.session_state:
     st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"

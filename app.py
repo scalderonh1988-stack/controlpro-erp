@@ -194,16 +194,24 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
 
     df_cxp = pd.read_excel(archivo_cxp)
     
+    # --- CÁLCULO AUTOMÁTICO DE DÍAS DE ATRASO ---
     if not df_cxp.empty:
+        # Buscamos si existe alguna columna relacionada con la fecha de vencimiento
         col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
         
         if col_venc:
             hoy = pd.to_datetime(date.today())
             fechas_venc = pd.to_datetime(df_cxp[col_venc], errors='coerce')
+            
+            # Restamos la fecha actual menos la fecha de vencimiento
             dias_atraso = (hoy - fechas_venc).dt.days
+            
+            # Si el resultado es menor o igual a 0 (está al día), los días de atraso son 0
             dias_atraso = dias_atraso.apply(lambda x: x if x > 0 else 0)
+            
             df_cxp["DiasAtraso"] = dias_atraso
         else:
+            # Si no encuentra la columna de fecha de vencimiento, inicializa en 0
             df_cxp["DiasAtraso"] = 0
 
     cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
@@ -242,6 +250,7 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
                         df_cxp.loc[idx, "Abono"] += monto_abono
                     st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
               
+                # Limpiamos la columna temporal antes de guardar para no duplicarla en el Excel base
                 if "DiasAtraso" in df_cxp.columns:
                     df_cxp = df_cxp.drop(columns=["DiasAtraso"])
                     

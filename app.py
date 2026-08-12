@@ -289,6 +289,127 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
     st.dataframe(df_gastos, use_container_width=True)
 
 
+def mostrar_modulo_conciliacion_retiros(ruta_negocio):
+    mostrar_encabezado_con_home("🏦 Conciliación Bancaria y Retiros Protegidos por Markup")
+    
+    st.markdown("""
+        <div style='background-color: #EFF6FF; padding: 15px; border-radius: 8px; border-left: 4px solid #3B82F6; margin-bottom: 20px;'>
+            <strong>💡 Control Financiero para Emprendedores:</strong> Este módulo te ayuda a calcular el 
+            <strong>retiro seguro de utilidades</strong> basado en tu porcentaje de Markup (margen), evitando que 
+            saques dinero destinado a la reposición de mercadería.
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Archivo de registros de retiros y parámetros
+    archivo_retiros = os.path.join(ruta_negocio, "Registro_Retiros_Seguros.xlsx")
+    if not os.path.exists(archivo_retiros):
+        pd.DataFrame(columns=['Fecha', 'VentaTotal', 'MarkupAplicado', 'CostoMercaderia', 'UtilidadRealRetirable', 'RetiroEfectuado', 'Observaciones']).to_excel(archivo_retiros, index=False)
+
+    tab_cr1, tab_cr2, tab_cr3 = st.tabs(["💰 Cálculo de Retiro Seguro (Markup)", "🏦 Conciliación de Cartolas (POS / Banco)", "📂 Historial de Retiros"])
+
+    with tab_cr1:
+        st.markdown("### 🎯 Asistente de Retiro Diario sin Desfinanciar el Negocio")
+        
+        with st.form("form_calculo_retiro"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                fecha_calculo = st.date_input("Fecha de la Cuadratura", value=date.today())
+                venta_dia_input = st.number_input("💵 Venta Total del Día ($)", min_value=0.0, step=1000.0, value=150000.0)
+            with col_c2:
+                markup_porcentaje = st.number_input("📈 Markup / Margen Promedio (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0, help="Porcentaje de margen estimado sobre el costo aplicado a tus productos.")
+                observacion_retiro = st.text_input("📝 Notas u Observaciones del Día", value="Cierre diario normal")
+
+            # Cálculo matemático transparente del Markup
+            # Fórmula inversa estándar: Venta = Costo * (1 + Markup/100) -> Costo = Venta / (1 + Markup/100)
+            markup_decimal = markup_porcentaje / 100.0
+            costo_reposicion = venta_dia_input / (1.0 + markup_decimal)
+            utilidad_neta_retirable = venta_dia_input - costo_reposicion
+
+            st.divider()
+            col_m1, col_m2, col_m3 = st.columns(3)
+            with col_m1:
+                st.metric(label="🛒 Venta Total Ingresada", value=f"${venta_dia_input:,.2f}")
+            with col_m2:
+                st.metric(label="🔒 Fondo Intocable (Reposición)", value=f"${costo_reposicion:,.2f}", delta="Guardar en Caja/Cuenta")
+            with col_m3:
+                st.metric(label="💵 Utilidad Real Retirable", value=f"${utilidad_neta_retirable:,.2f}", delta="Disponible para Retiro")
+
+            btn_guardar_retiro = st.form_submit_button("💾 Guardar Registro de Retiro Seguro", type="primary")
+
+            if btn_guardar_retiro:
+                if venta_dia_input <= 0:
+                    st.warning("⚠️ Ingresa una venta válida mayor a 0.")
+                else:
+                    df_ret_ant = pd.read_excel(archivo_retiros)
+                    nuevo_reg_ret = pd.DataFrame([{
+                        'Fecha': str(fecha_calculo),
+                        'VentaTotal': venta_dia_input,
+                        'MarkupAplicado': markup_porcentaje,
+                        'CostoMercaderia': costo_reposicion,
+                        'UtilidadRealRetirable': utilidad_neta_retirable,
+                        'RetiroEfectuado': utilidad_neta_retirable,
+                        'Observaciones': observacion_retiro
+                    }])
+                    pd.concat([df_ret_ant, nuevo_reg_ret], ignore_index=True).to_excel(archivo_retiros, index=False)
+                    st.success("✅ ¡Registro guardado con éxito! Se protegió el fondo de reposición de mercadería.")
+                    st.rerun()
+
+    with tab_cr2:
+        st.markdown("### 🏦 Conciliación de Transacciones (Transbank / Bancos / Transferencias)")
+        st.info("ℹ️ Carga o revisa los abonos de tarjetas y transferencias para contrastarlos con tus ventas diarias registradas en el POS.")
+        
+        archivo_conciliacion = os.path.join(ruta_negocio, "Conciliacion_Bancaria.xlsx")
+        if not os.path.exists(archivo_conciliacion):
+            pd.DataFrame(columns=['Fecha', 'Origen', 'MontoVentaPOS', 'MontoAbonadoBanco', 'Diferencia', 'Estado']).to_excel(archivo_conciliacion, index=False)
+
+        df_conci = pd.read_excel(archivo_conciliacion)
+        st.dataframe(df_conci, use_container_width=True)
+
+        with st.form("form_nueva_conciliacion"):
+            st.markdown("#### ➕ Registrar Validación de Cartola")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                f_conci = st.date_input("Fecha de Cartola", value=date.today(), key="f_con")
+                origen_pago = st.selectbox("Origen del Abono", ["Transbank / Débito", "Transbank / Crédito", "Transferencia Bancaria Directa", "Efectivo Depositado"])
+            with col_b2:
+                monto_pos = st.number_input("Monto Registrado en POS ($)", min_value=0.0, step=100.0, value=0.0, key="m_pos")
+                monto_banco = st.number_input("Monto Abonado en Banco ($)", min_value=0.0, step=100.0, value=0.0, key="m_ban")
+
+            diferencia_banco = monto_banco - monto_pos
+            if diferencia_banco == 0:
+                estado_conci = "Conciliado OK"
+            elif diferencia_banco < 0:
+                estado_conci = "Diferencia en contra (Comisión o Faltante)"
+            else:
+                estado_conci = "Abono Mayor"
+
+            st.write(f"📊 **Diferencia Calculada:** ${diferencia_banco:,.2f} ({estado_conci})")
+
+            if st.form_submit_button("💾 Guardar Validación Bancaria"):
+                nuevo_c = pd.DataFrame([{
+                    'Fecha': str(f_conci),
+                    'Origen': origen_pago,
+                    'MontoVentaPOS': monto_pos,
+                    'MontoAbonadoBanco': monto_banco,
+                    'Diferencia': diferencia_banco,
+                    'Estado': estado_conci
+                }])
+                pd.concat([df_conci, nuevo_c], ignore_index=True).to_excel(archivo_conciliacion, index=False)
+                st.success("✅ ¡Conciliación registrada correctamente!")
+                st.rerun()
+
+    with tab_cr3:
+        st.markdown("### 📂 Historial de Retiros Seguros Realizados")
+        if os.path.exists(archivo_retiros):
+            df_hist_ret = pd.read_excel(archivo_retiros)
+            if not df_hist_ret.empty:
+                st.dataframe(df_hist_ret, use_container_width=True)
+                total_retirado = df_hist_ret['UtilidadRealRetirable'].sum() if 'UtilidadRealRetirable' in df_hist_ret.columns else 0.0
+                st.metric(label="💵 Utilidad Histórica Retirada de forma Segura", value=f"${total_retirado:,.2f}")
+            else:
+                st.info("ℹ️ No hay registros de retiros todavía.")
+
+
 # --- 4. SISTEMA DE AUTENTICACIÓN INTELIGENTE UNIFICADO ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
@@ -395,6 +516,7 @@ modulos_totales = [
     "📊 Módulo de Finanzas",
     "📒 Cuadratura Diaria",
     "📑 Cuentas por Cobrar",
+    "🏦 Conciliación y Retiros Seguros",
     "⚙️ Configuración General"
 ]
 
@@ -539,6 +661,7 @@ if menu == "🏠 Home / Bienvenida":
         {"id": "fin", "nombre_ref": "Módulo de Finanzas", "label": "📊 Módulo de Finanzas"},
         {"id": "cuadratura", "nombre_ref": "Cuadratura Diaria", "label": "📒 Cuadratura Diaria"},
         {"id": "cobrar", "nombre_ref": "Cuentas por Cobrar", "label": "📑 Cuentas por Cobrar"},
+        {"id": "conci", "nombre_ref": "Conciliación y Retiros Seguros", "label": "🏦 Conciliación y Retiros Seguros"},
         {"id": "conf", "nombre_ref": "Configuración General", "label": "⚙️ Configuración General"}
     ]
 
@@ -1246,9 +1369,9 @@ elif menu == "⚠️ Control y Gestión de Inventario":
         else:
             st.error("⚠️ Falta la base de datos.")
 
-# ----------------- SECCIÓN COMPRAS -----------------
+# ----------------- SECCIÓN COMPRAS Y RECEPCIONES (GRC / GRI) -----------------
 elif menu == "🛒 Registrar Compra (CPP)":
-    mostrar_encabezado_con_home("🛒 Registrar Compra (CPP)")
+    mostrar_encabezado_con_home("🛒 Gestión de Compras y Recepciones (GRC / GRI)")
 
     if df_base is not None:
         col_cod = next((c for c in df_base.columns if 'código' in str(c).lower() or 'codigo' in str(c).lower() or 'ean' in str(c).lower()), df_base.columns[0])
@@ -1256,19 +1379,18 @@ elif menu == "🛒 Registrar Compra (CPP)":
         col_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower()), None)
         col_precio = next((c for c in df_base.columns if 'precio' in str(c).lower() or 'venta' in str(c).lower()), None)
 
-        accion_producto = st.radio("Selecciona una opción:", ["📥 Registrar Compra (Factura con Lotes)", "➕ Crear Producto Nuevo", "✏️ Editar Producto Existente"], horizontal=True)
+        accion_producto = st.radio("Selecciona una opción:", ["📥 Registrar Compra / GRC (Factura con Lotes)", "🔄 Recepción Interna / GRI (Ajustes / Producción)", "➕ Crear Producto Nuevo", "✏️ Editar Producto Existente"], horizontal=True)
         st.divider()
 
-        if accion_producto == "📥 Registrar Compra (Factura con Lotes)":
-            st.markdown("### 📋 Cabecera de la Factura")
+        # --- 1. REGISTRO GRC (Guía de Recepción de Compra - Proveedor Externo) ---
+        if accion_producto == "📥 Registrar Compra / GRC (Factura con Lotes)":
+            st.markdown("### 📋 Cabecera de la Recepción de Compra (GRC)")
 
-            # Cargamos los proveedores desde la base de datos o ruta de negocio de manera segura
             path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
             try:
                 df_prov_list = pd.read_excel(path_db, sheet_name="BD_Proveedores", dtype={'RUT': str})
                 lista_proveedores = df_prov_list['Nombre'].tolist() if not df_prov_list.empty else ["Sin Proveedores Registrados"]
             except Exception:
-                # Fallback si la hoja no existe en el archivo principal, revisamos archivo dedicado
                 try:
                     archivo_prov_alt = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx") if 'ruta_negocio' in globals() else "Maestro_Proveedores.xlsx"
                     if os.path.exists(archivo_prov_alt):
@@ -1282,16 +1404,15 @@ elif menu == "🛒 Registrar Compra (CPP)":
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
                 proveedor_factura = st.selectbox("Nombre del Proveedor", options=lista_proveedores)
-                num_factura = st.text_input("Número de Factura")
+                num_factura = st.text_input("Número de Factura / Folio GRC")
             with col_f2:
-                fecha_compra = st.date_input("Fecha de Compra", value=date.today())
+                fecha_compra = st.date_input("Fecha de Recepción GRC", value=date.today())
                 condicion_pago = st.selectbox("Condición de Pago", ["Contado", "Crédito", "Cheque"])
             with col_f3:
                 col_imp_esp = next((c for c in df_base.columns if 'impuesto' in str(c).lower() or 'específico' in str(c).lower() or ' ila ' in str(c).lower() or 'iaba' in str(c).lower()), None)
                 st.write("")
                 st.write(f"🔍 Columna de Impuestos: **{'Detectada' if col_imp_esp else 'No detectada'}**")
 
-            # Campos dinámicos para Crédito o Cheque
             fecha_vencimiento_pago = fecha_compra
             num_serie_cheque = ""
             banco_cheque = ""
@@ -1308,19 +1429,18 @@ elif menu == "🛒 Registrar Compra (CPP)":
                     banco_cheque = st.text_input("Banco Emisor")
 
             st.divider()
-            st.markdown("#### 🔍 Agregar Productos de la Factura")
+            st.markdown("#### 🔍 Agregar Productos de la GRC")
 
             if 'carrito_factura_compras' not in st.session_state:
                 st.session_state.carrito_factura_compras = []
 
-            # 1. Búsqueda de producto fuera del formulario para que sea reactiva
-            metodo_entrada_prod = st.radio("Método para buscar producto:", ["⌨️ Escáner / Pistola Láser (Código)", "🔎 Buscar por Nombre / Palabra Clave"], horizontal=True)
+            metodo_entrada_prod = st.radio("Método para buscar producto:", ["⌨️ Escáner / Pistola Láser (Código)", "🔎 Buscar por Nombre / Palabra Clave"], horizontal=True, key="metodo_busq_grc")
         
             prod_seleccionado_item = None
             opciones_productos = ["-- Selecciona un producto --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_base.iterrows()]
 
             if metodo_entrada_prod == "⌨️ Escáner / Pistola Láser (Código)":
-                codigo_buscado = st.text_input("Pistola láser / Digitar Código EAN:", key="input_pistola_compra")
+                codigo_buscado = st.text_input("Pistola láser / Digitar Código EAN:", key="input_pistola_compra_grc")
                 if codigo_buscado:
                     match_p = df_base[df_base[col_cod].astype(str) == str(codigo_buscado)]
                     if not match_p.empty:
@@ -1329,16 +1449,15 @@ elif menu == "🛒 Registrar Compra (CPP)":
                     else:
                         st.warning("⚠️ No se encontró ningún producto con ese código.")
             else:
-                prod_seleccionado_item = st.selectbox("Selecciona o busca por palabra clave:", options=opciones_productos, key="select_palabra_clave_compra")
+                prod_seleccionado_item = st.selectbox("Selecciona o busca por palabra clave:", options=opciones_productos, key="select_palabra_clave_compra_grc")
 
-            # 2. Controles fuera del form para que el despliegue de lote sea inmediato
             col_item1, col_item2, col_item3 = st.columns(3)
             with col_item1:
-                cant_item = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0)
+                cant_item = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, key="cant_grc")
             with col_item2:
-                neto_unit_item = st.number_input("Valor Neto Unitario ($)", min_value=0.0, step=1.0, value=0.0)
+                neto_unit_item = st.number_input("Valor Neto Unitario ($)", min_value=0.0, step=1.0, value=0.0, key="neto_grc")
             with col_item3:
-                maneja_lote = st.selectbox("¿Maneja Lote y Vencimiento?", ["No", "Sí"])
+                maneja_lote = st.selectbox("¿Maneja Lote y Vencimiento?", ["No", "Sí"], key="lote_grc")
 
             lote_item = "SIN-LOTE"
             venc_item = str(date.today())
@@ -1347,13 +1466,12 @@ elif menu == "🛒 Registrar Compra (CPP)":
                 st.markdown("📌 **Ingrese los datos reales del lote:**")
                 col_l1, col_l2 = st.columns(2)
                 with col_l1:
-                    lote_item = st.text_input("N° Lote", value="LOTE-001")
+                    lote_item = st.text_input("N° Lote", value="LOTE-001", key="num_lote_grc")
                 with col_l2:
-                    venc_item_date = st.date_input("Fecha de Vencimiento Lote", value=date.today())
+                    venc_item_date = st.date_input("Fecha de Vencimiento Lote", value=date.today(), key="venc_lote_grc")
                     venc_item = str(venc_item_date)
 
-            # Botón para añadir al listado temporal
-            if st.button("➕ Agregar Línea a la Factura", type="primary"):
+            if st.button("➕ Agregar Línea a la GRC", type="primary", key="btn_add_grc"):
                 if not prod_seleccionado_item or prod_seleccionado_item == "-- Selecciona un producto --":
                     st.warning("⚠️ Debes seleccionar o escanear un producto válido.")
                 elif neto_unit_item <= 0:
@@ -1379,6 +1497,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                     costo_unitario_final = costo_total_linea / cant_item
 
                     st.session_state.carrito_factura_compras.append({
+                        "TipoDoc": "GRC",
                         "Código": codigo_p,
                         "Descripción": prod_seleccionado_item.split(" - ")[1],
                         "Cantidad": cant_item,
@@ -1392,36 +1511,35 @@ elif menu == "🛒 Registrar Compra (CPP)":
                         "Lote": lote_item if maneja_lote == "Sí" else "N/A",
                         "FechaVencimiento": venc_item if maneja_lote == "Sí" else "N/A"
                     })
-                    st.success(f"✅ ¡Línea agregada!")
+                    st.success(f"✅ ¡Línea agregada a la GRC!")
                     st.rerun()
 
-            # 3. Mostrar el listado acumulado y procesar factura completa
             if st.session_state.carrito_factura_compras:
-                st.markdown("#### 📦 Productos Agregados en esta Factura")
+                st.markdown("#### 📦 Productos Agregados en esta GRC")
             
                 for idx_c, item in enumerate(st.session_state.carrito_factura_compras):
-                    c_col1, c_col2 = st.columns([8, 1])
-                    with c_col1:
-                        st.info(f"**{item['Cantidad']}x** {item['Descripción']} | Neto: ${item['NetoUnitario']:,.0f} | **Costo Unit. c/Imp: ${item['CostoUnitarioFinal']:,.0f}** | Total c/Imp: ${item['CostoTotal']:,.0f} | Lote: {item['Lote']} ({item['FechaVencimiento']})")
-                    with c_col2:
-                        if st.button("❌", key=f"del_linea_{idx_c}", help="Eliminar esta línea"):
-                            st.session_state.carrito_factura_compras.pop(idx_c)
-                            st.rerun()
+                    if item.get("TipoDoc", "GRC") == "GRC":
+                        c_col1, c_col2 = st.columns([8, 1])
+                        with c_col1:
+                            st.info(f"**{item['Cantidad']}x** {item['Descripción']} | Neto: ${item['NetoUnitario']:,.0f} | **Costo Unit. c/Imp: ${item['CostoUnitarioFinal']:,.0f}** | Total: ${item['CostoTotal']:,.0f} | Lote: {item['Lote']} ({item['FechaVencimiento']})")
+                        with c_col2:
+                            if st.button("❌", key=f"del_linea_grc_{idx_c}", help="Eliminar esta línea"):
+                                st.session_state.carrito_factura_compras.pop(idx_c)
+                                st.rerun()
 
-                monto_total_factura_general = sum(item["CostoTotal"] for item in st.session_state.carrito_factura_compras)
-                st.markdown(f"### 💰 **Monto Total de la Factura (con Impuestos): ${monto_total_factura_general:,.2f}**")
+                monto_total_factura_general = sum(item["CostoTotal"] for item in st.session_state.carrito_factura_compras if item.get("TipoDoc", "GRC") == "GRC")
+                st.markdown(f"### 💰 **Monto Total GRC (con Impuestos): ${monto_total_factura_general:,.2f}**")
 
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
-                    if st.button("🗑️ Limpiar / Vaciar Listado", type="secondary"):
-                        st.session_state.carrito_factura_compras = []
+                    if st.button("🗑️ Limpiar / Vaciar GRC", type="secondary", key="btn_limpiar_grc"):
+                        st.session_state.carrito_factura_compras = [i for i in st.session_state.carrito_factura_compras if i.get("TipoDoc") != "GRC"]
                         st.rerun()
                 with col_b2:
-                    if st.button("💾 Procesar Factura Completa y Actualizar Stock/Finanzas", type="primary"):
+                    if st.button("💾 Procesar GRC Completa y Actualizar Stock/Finanzas", type="primary", key="btn_procesar_grc"):
                         if not num_factura:
-                            st.warning("⚠️ Ingresa el Número de Factura antes de procesar.")
+                            st.warning("⚠️ Ingresa el Número de Factura o Folio GRC antes de procesar.")
                         else:
-                            # Asegurar persistencia del proveedor en maestro de proveedores
                             prov_final = proveedor_factura if proveedor_factura else "Proveedor General"
                             try:
                                 archivo_prov_reg = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx") if 'ruta_negocio' in globals() else "Maestro_Proveedores.xlsx"
@@ -1436,79 +1554,84 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                 pass
 
                             procesados = 0
+                            lineas_detalle_grc = ""
                             for item in st.session_state.carrito_factura_compras:
-                                nuevo_reg_compra = pd.DataFrame([{
-                                    "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    "Proveedor": prov_final,
-                                    "Factura": num_factura,
-                                    "Código": item["Código"],
-                                    "Descripción": item["Descripción"],
-                                    "Cantidad": item["Cantidad"],
-                                    "NetoUnitario": item["NetoUnitario"],
-                                    "SubtotalNeto": item["SubtotalNeto"],
-                                    "IVA": item["IVA"],
-                                    "ImpuestoEspecifico": item["ImpuestoEspecifico"],
-                                    "CostoTotal": item["CostoTotal"],
-                                    "ManejaLote": item["ManejaLote"],
-                                    "Lote": item["Lote"],
-                                    "FechaVencimientoLote": item["FechaVencimiento"],
-                                    "Condicion_Pago": condicion_pago,
-                                    "FechaVencimientoPago": str(fecha_vencimiento_pago),
-                                    "Banco": banco_cheque,
-                                    "N_Serie": num_serie_cheque,
-                                    "Estado": estado_inicial
-                                }])
-
-                                archivo_compras_path = os.path.join(ruta_negocio, "Registro_Compras.xlsx") if 'ruta_negocio' in globals() else "Registro_Compras.xlsx"
-                                if os.path.exists(archivo_compras_path):
-                                    df_ec = pd.read_excel(archivo_compras_path, dtype={'Código': str, 'Factura': str})
-                                    pd.concat([df_ec, nuevo_reg_compra], ignore_index=True).to_excel(archivo_compras_path, index=False)
-                                else:
-                                    nuevo_reg_compra.to_excel(archivo_compras_path, index=False)
-
-                                if item["ManejaLote"] == "Sí":
-                                    archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
-                                    nuevo_reg_lote = pd.DataFrame([{
+                                if item.get("TipoDoc", "GRC") == "GRC":
+                                    lineas_detalle_grc += f"- {item['Descripción']} (x{item['Cantidad']}) | Costo Unit: ${item['CostoUnitarioFinal']:,.2f} | Subtotal: ${item['CostoTotal']:,.2f} | Lote: {item['Lote']}\n"
+                                    
+                                    nuevo_reg_compra = pd.DataFrame([{
+                                        "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        "TipoRecepcion": "GRC",
+                                        "Proveedor": prov_final,
+                                        "Factura": num_factura,
                                         "Código": item["Código"],
                                         "Descripción": item["Descripción"],
+                                        "Cantidad": item["Cantidad"],
+                                        "NetoUnitario": item["NetoUnitario"],
+                                        "SubtotalNeto": item["SubtotalNeto"],
+                                        "IVA": item["IVA"],
+                                        "ImpuestoEspecifico": item["ImpuestoEspecifico"],
+                                        "CostoTotal": item["CostoTotal"],
+                                        "ManejaLote": item["ManejaLote"],
                                         "Lote": item["Lote"],
-                                        "CantidadDisponible": item["Cantidad"],
-                                        "FechaVencimiento": item["FechaVencimiento"],
-                                        "CostoUnitarioFinal": item["CostoUnitarioFinal"]
+                                        "FechaVencimientoLote": item["FechaVencimiento"],
+                                        "Condicion_Pago": condicion_pago,
+                                        "FechaVencimientoPago": str(fecha_vencimiento_pago),
+                                        "Banco": banco_cheque,
+                                        "N_Serie": num_serie_cheque,
+                                        "Estado": estado_inicial
                                     }])
 
-                                    if os.path.exists(archivo_lotes):
-                                        df_lotes = pd.read_excel(archivo_lotes, dtype={'Código': str})
-                                        match_l = df_lotes[(df_lotes['Código'].astype(str) == str(item["Código"])) & (df_lotes['Lote'].astype(str) == str(item["Lote"]))]
-                                        if not match_l.empty:
-                                            idx_l = match_l.index[0]
-                                            cant_ant = float(df_lotes.at[idx_l, 'CantidadDisponible'])
-                                            df_lotes.at[idx_l, 'CantidadDisponible'] = cant_ant + item["Cantidad"]
-                                            df_lotes.at[idx_l, 'CostoUnitarioFinal'] = item["CostoUnitarioFinal"]
-                                            df_lotes.at[idx_l, 'FechaVencimiento'] = item["FechaVencimiento"]
-                                            df_lotes.to_excel(archivo_lotes, index=False)
-                                        else:
-                                            pd.concat([df_lotes, nuevo_reg_lote], ignore_index=True).to_excel(archivo_lotes, index=False)
+                                    archivo_compras_path = os.path.join(ruta_negocio, "Registro_Compras.xlsx") if 'ruta_negocio' in globals() else "Registro_Compras.xlsx"
+                                    if os.path.exists(archivo_compras_path):
+                                        df_ec = pd.read_excel(archivo_compras_path, dtype={'Código': str, 'Factura': str})
+                                        pd.concat([df_ec, nuevo_reg_compra], ignore_index=True).to_excel(archivo_compras_path, index=False)
                                     else:
-                                        nuevo_reg_lote.to_excel(archivo_lotes, index=False)
+                                        nuevo_reg_compra.to_excel(archivo_compras_path, index=False)
 
-                                match_prod_b = df_base[df_base[col_cod].astype(str) == str(item["Código"])]
-                                if not match_prod_b.empty:
-                                    idx_b = match_prod_b.index[0]
-                                    stock_act = float(df_base.at[idx_b, col_stock]) if col_stock and not pd.isna(df_base.at[idx_b, col_stock]) else 0.0
-                                    df_base.at[idx_b, col_stock] = stock_act + item["Cantidad"]
-                                    df_base.to_excel(archivo_base, index=False)
+                                    if item["ManejaLote"] == "Sí":
+                                        archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
+                                        nuevo_reg_lote = pd.DataFrame([{
+                                            "Código": item["Código"],
+                                            "Descripción": item["Descripción"],
+                                            "Lote": item["Lote"],
+                                            "CantidadDisponible": item["Cantidad"],
+                                            "FechaVencimiento": item["FechaVencimiento"],
+                                            "CostoUnitarioFinal": item["CostoUnitarioFinal"]
+                                        }])
 
-                                procesados += 1
+                                        if os.path.exists(archivo_lotes):
+                                            df_lotes = pd.read_excel(archivo_lotes, dtype={'Código': str})
+                                            match_l = df_lotes[(df_lotes['Código'].astype(str) == str(item["Código"])) & (df_lotes['Lote'].astype(str) == str(item["Lote"]))]
+                                            if not match_l.empty:
+                                                idx_l = match_l.index[0]
+                                                cant_ant = float(df_lotes.at[idx_l, 'CantidadDisponible'])
+                                                df_lotes.at[idx_l, 'CantidadDisponible'] = cant_ant + item["Cantidad"]
+                                                df_lotes.at[idx_l, 'CostoUnitarioFinal'] = item["CostoUnitarioFinal"]
+                                                df_lotes.at[idx_l, 'FechaVencimiento'] = item["FechaVencimiento"]
+                                                df_lotes.to_excel(archivo_lotes, index=False)
+                                            else:
+                                                pd.concat([df_lotes, nuevo_reg_lote], ignore_index=True).to_excel(archivo_lotes, index=False)
+                                        else:
+                                            nuevo_reg_lote.to_excel(archivo_lotes, index=False)
 
-                            # AUTOMATIZACIÓN 1: REGISTRAR SIEMPRE EN REGISTRO DE GASTOS
+                                    match_prod_b = df_base[df_base[col_cod].astype(str) == str(item["Código"])]
+                                    if not match_prod_b.empty:
+                                        idx_b = match_prod_b.index[0]
+                                        stock_act = float(df_base.at[idx_b, col_stock]) if col_stock and not pd.isna(df_base.at[idx_b, col_stock]) else 0.0
+                                        df_base.at[idx_b, col_stock] = stock_act + item["Cantidad"]
+                                        df_base.to_excel(archivo_base, index=False)
+
+                                    procesados += 1
+
+                            # Registrar en Gastos
                             archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx") if 'ruta_negocio' in globals() else "Registro_Gastos.xlsx"
                             nuevo_gasto = pd.DataFrame([{
                                 'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                'Descripcion_Gasto': f"Compra Factura #{num_factura} - {prov_final}",
+                                'Descripcion_Gasto': f"GRC Factura/Folio #{num_factura} - {prov_final}",
                                 'Categoria': 'Mercadería',
                                 'Metodo_Pago': condicion_pago,
-                                'Documento': f"Factura {num_factura}",
+                                'Documento': f"GRC {num_factura}",
                                 'Monto': monto_total_factura_general
                             }])
                             if os.path.exists(archivo_gastos):
@@ -1517,7 +1640,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                             else:
                                 nuevo_gasto.to_excel(archivo_gastos, index=False)
 
-                            # AUTOMATIZACIÓN 2: SI ES CRÉDITO O CHEQUE, ENVIAR A CUENTAS POR PAGAR
+                            # Registrar en Cuentas por Pagar si aplica
                             if condicion_pago in ["Crédito", "Cheque"]:
                                 archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx") if 'ruta_negocio' in globals() else "Cuentas_Por_Pagar.xlsx"
                                 nueva_cuenta = pd.DataFrame([{
@@ -1534,10 +1657,164 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                 else:
                                     nueva_cuenta.to_excel(archivo_cuentas, index=False)
 
-                            st.session_state.carrito_factura_compras = []
-                            st.success(f"✅ ¡Factura #{num_factura} procesada con éxito! Se actualizó el stock, se registró en gastos y {'se guardó en Cuentas por Pagar' if condicion_pago in ['Crédito', 'Cheque'] else 'quedó saldada al contado'}.")
+                            # 🗂️ ARCHIVADOR AUTOMÁTICO GRC (Subdirectorio)
+                            try:
+                                dir_arch_grc = os.path.join(ruta_negocio, "archivador_compras", "grc")
+                                os.makedirs(dir_arch_grc, exist_ok=True)
+                                doc_grc_txt = f"""========================================
+ GUÍA DE RECEPCIÓN DE COMPRA (GRC)
+========================================
+FOLIO / FACTURA: {num_factura}
+PROVEEDOR: {prov_final}
+FECHA: {fecha_compra}
+CONDICIÓN PAGO: {condicion_pago}
+----------------------------------------
+DETALLE:
+{lineas_detalle_grc}----------------------------------------
+TOTAL GRC: ${monto_total_factura_general:,.2f}
+========================================"""
+                                ruta_doc_grc = os.path.join(dir_arch_grc, f"GRC_{num_factura}.txt")
+                                with open(ruta_doc_grc, "w", encoding="utf-8") as f_grc:
+                                    f_grc.write(doc_grc_txt)
+                            except Exception as e:
+                                print(f"Error archivando GRC: {e}")
+
+                            st.session_state.carrito_factura_compras = [i for i in st.session_state.carrito_factura_compras if i.get("TipoDoc") != "GRC"]
+                            st.success(f"✅ ¡GRC #{num_factura} procesada con éxito! Stock actualizado, documento archivado y finanzas sincronizadas.")
                             st.rerun()
 
+        # --- 2. REGISTRO GRI (Guía de Recepción Interna - Ajustes / Producción / Hallazgos) ---
+        elif accion_producto == "🔄 Recepción Interna / GRI (Ajustes / Producción)":
+            st.markdown("### 🔄 Generar Guía de Recepción Interna (GRI)")
+            st.info("ℹ️ Use este módulo para ingresos de inventario generados internamente (devoluciones, producción propia, hallazgos o ajustes positivos de bodega).")
+
+            with st.form("form_gri_interno"):
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    folio_gri = st.text_input("N° Folio GRI interno (ej. GRI-2026-001)")
+                    motivo_gri = st.selectbox("Motivo del Ingreso Interno", ["Producción Propia", "Hallazgo de Inventario / Conteo", "Devolución de Cliente", "Ajuste Positivo de Bodega", "Otro"])
+                with col_g2:
+                    fecha_gri = st.date_input("Fecha de Recepción Interna", value=date.today())
+                    responsable_gri = st.text_input("Responsable / Autorizado por")
+
+                st.markdown("#### 📦 Seleccionar Producto y Cantidad")
+                opciones_prod_gri = ["-- Selecciona un producto --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_base.iterrows()]
+                prod_gri_sel = st.selectbox("Producto a Ingresar Internamente", options=opciones_prod_gri)
+                
+                col_q1, col_q2 = st.columns(2)
+                with col_q1:
+                    cant_gri = st.number_input("Cantidad a Ingresar", min_value=1.0, step=1.0, value=1.0)
+                with col_q2:
+                    costo_estimado_gri = st.number_input("Costo Unitario de Referencia ($)", min_value=0.0, step=1.0, value=0.0)
+
+                maneja_lote_gri = st.selectbox("¿Asignar Lote a este ingreso interno?", ["No", "Sí"])
+                lote_gri = "GRI-LOTE"
+                venc_gri = str(date.today())
+
+                if maneja_lote_gri == "Sí":
+                    col_lg1, col_lg2 = st.columns(2)
+                    with col_lg1:
+                        lote_gri = st.text_input("N° Lote Interno", value="LOTE-INT-01")
+                    with col_lg2:
+                        venc_gri_date = st.date_input("Fecha de Vencimiento Lote Interno", value=date.today())
+                        venc_gri = str(venc_gri_date)
+
+                btn_procesar_gri = st.form_submit_button("💾 Emitir GRI y Actualizar Inventario", type="primary")
+
+                if btn_procesar_gri:
+                    if not folio_gri:
+                        st.warning("⚠️ Debes ingresar un número de folio para la GRI.")
+                    elif prod_gri_sel == "-- Selecciona un producto --":
+                        st.warning("⚠️ Selecciona un producto válido.")
+                    elif cant_gri <= 0:
+                        st.warning("⚠️ La cantidad debe ser mayor a 0.")
+                    else:
+                        codigo_gri = prod_gri_sel.split(" - ")[0]
+                        desc_gri = prod_gri_sel.split(" - ")[1]
+                        
+                        # 1. Actualizar Stock en base principal
+                        match_gri = df_base[df_base[col_cod].astype(str) == str(codigo_gri)]
+                        if not match_gri.empty:
+                            idx_g = match_gri.index[0]
+                            stock_actual_g = float(df_base.at[idx_g, col_stock]) if col_stock and not pd.isna(df_base.at[idx_g, col_stock]) else 0.0
+                            df_base.at[idx_g, col_stock] = stock_actual_g + cant_gri
+                            df_base.to_excel(archivo_base, index=False)
+
+                        # 2. Registrar en base de lotes si aplica
+                        if maneja_lote_gri == "Sí":
+                            archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
+                            nuevo_reg_lote_gri = pd.DataFrame([{
+                                "Código": codigo_gri,
+                                "Descripción": desc_gri,
+                                "Lote": lote_gri,
+                                "CantidadDisponible": cant_gri,
+                                "FechaVencimiento": venc_gri,
+                                "CostoUnitarioFinal": costo_estimado_gri
+                            }])
+                            if os.path.exists(archivo_lotes):
+                                df_lotes_g = pd.read_excel(archivo_lotes, dtype={'Código': str})
+                                pd.concat([df_lotes_g, nuevo_reg_lote_gri], ignore_index=True).to_excel(archivo_lotes, index=False)
+                            else:
+                                nuevo_reg_lote_gri.to_excel(archivo_lotes, index=False)
+
+                        # 3. Registrar en Registro de Compras/Recepciones como GRI
+                        nuevo_reg_gri_hist = pd.DataFrame([{
+                            "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "TipoRecepcion": "GRI",
+                            "Proveedor": f"INTERNO ({motivo_gri})",
+                            "Factura": folio_gri,
+                            "Código": codigo_gri,
+                            "Descripción": desc_gri,
+                            "Cantidad": cant_gri,
+                            "NetoUnitario": costo_estimado_gri,
+                            "SubtotalNeto": cant_gri * costo_estimado_gri,
+                            "IVA": 0.0,
+                            "ImpuestoEspecifico": 0.0,
+                            "CostoTotal": cant_gri * costo_estimado_gri,
+                            "ManejaLote": maneja_lote_gri,
+                            "Lote": lote_gri,
+                            "FechaVencimientoLote": venc_gri,
+                            "Condicion_Pago": "Interno",
+                            "FechaVencimientoPago": str(fecha_gri),
+                            "Banco": "",
+                            "N_Serie": responsable_gri,
+                            "Estado": "Completado"
+                        }])
+                        archivo_compras_path = os.path.join(ruta_negocio, "Registro_Compras.xlsx") if 'ruta_negocio' in globals() else "Registro_Compras.xlsx"
+                        if os.path.exists(archivo_compras_path):
+                            df_ec_g = pd.read_excel(archivo_compras_path, dtype={'Código': str, 'Factura': str})
+                            pd.concat([df_ec_g, nuevo_reg_gri_hist], ignore_index=True).to_excel(archivo_compras_path, index=False)
+                        else:
+                            nuevo_reg_gri_hist.to_excel(archivo_compras_path, index=False)
+
+                        # 🗂️ 4. ARCHIVADOR AUTOMÁTICO GRI (Subdirectorio)
+                        try:
+                            dir_arch_gri = os.path.join(ruta_negocio, "archivador_compras", "gri")
+                            os.makedirs(dir_arch_gri, exist_ok=True)
+                            doc_gri_txt = f"""========================================
+ GUÍA DE RECEPCIÓN INTERNA (GRI)
+========================================
+FOLIO: {folio_gri}
+MOTIVO: {motivo_gri}
+RESPONSABLE: {responsable_gri}
+FECHA: {fecha_gri}
+----------------------------------------
+PRODUCTO INGRESADO:
+- {desc_gri} (Código: {codigo_gri})
+- Cantidad: {cant_gri}
+- Costo Ref: ${costo_estimado_gri:,.2f}
+- Lote: {lote_gri} (Venc: {venc_gri})
+========================================"""
+                            ruta_doc_gri = os.path.join(dir_arch_gri, f"GRI_{folio_gri}.txt")
+                            with open(ruta_doc_gri, "w", encoding="utf-8") as f_gri:
+                                f_gri.write(doc_gri_txt)
+                        except Exception as e:
+                            print(f"Error archivando GRI: {e}")
+
+                        st.success(f"✅ ¡GRI #{folio_gri} procesada con éxito! Stock actualizado y documento archivado automáticamente.")
+                        st.rerun()
+
+        # --- 3. CREAR PRODUCTO NUEVO ---
         elif accion_producto == "➕ Crear Producto Nuevo":
             st.markdown("### 🆕 Ingresar Nuevo Producto a la Base de Datos")
             codigo_scanned_nuevo = st.text_input("📷 Digita o ingresa el código del producto nuevo:", key="scan_nuevo_prod")
@@ -1566,6 +1843,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                     else:
                         st.warning("⚠️ Debes ingresar al menos el código y la descripción.")
 
+        # --- 4. EDITAR PRODUCTO EXISTENTE ---
         elif accion_producto == "✏️ Editar Producto Existente":
             st.markdown("### ✏️ Modificar datos de un Producto Existente")
             opciones_editar = ["-- Selecciona producto a editar --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_base.iterrows()]
@@ -2096,6 +2374,10 @@ elif menu == "📑 Cuentas por Cobrar":
 elif menu == "📒 Cuadratura Diaria":
     mostrar_encabezado_con_home("📒 Cuaderno de Cuadratura y Caja Diaria")
     mostrar_modulo_cuadratura_diaria(ruta_negocio)
+
+elif menu == "🏦 Conciliación y Retiros Seguros": 
+    mostrar_modulo_conciliacion_retiros(ruta_negocio)
+
 
 
 

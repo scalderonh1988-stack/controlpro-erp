@@ -264,10 +264,44 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
     archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
+    
+    # Validar si existe el archivo
     if not os.path.exists(archivo_cuentas):
         pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado']).to_excel(archivo_cuentas, index=False)
+    
     df_cuentas = pd.read_excel(archivo_cuentas)
+    
+    # Mostrar la tabla actual
     st.dataframe(df_cuentas, use_container_width=True)
+    
+    st.divider()
+    st.markdown("### ⚙️ Actualizar Estado de Documento")
+    
+    if not df_cuentas.empty:
+        # Filtrar solo las que están pendientes o mostrar todas para gestionar
+        opciones_facturas = []
+        for idx, row in df_cuentas.iterrows():
+            opciones_facturas.append(f"Fila {idx} - Prov: {row.get('Proveedor')} | Factura #{row.get('Numero_Factura')} | Estado: {row.get('Estado')}")
+        
+        with st.form("form_actualizar_estado_cxp"):
+            factura_seleccionada = st.selectbox("Selecciona la factura a modificar:", options=opciones_facturas)
+            nuevo_estado = st.selectbox("Nuevo Estado:", options=["PAGADO", "PENDIENTE"])
+            
+            btn_actualizar_estado = st.form_submit_button("🔄 Actualizar Estado de Factura", type="primary")
+            
+            if btn_actualizar_estado and factura_seleccionada:
+                # Extraer el índice exacto de la fila seleccionada
+                idx_fila = int(factura_seleccionada.split(" - ")[0].replace("Fila ", ""))
+                
+                # Actualizar el estado en el DataFrame
+                df_cuentas.loc[idx_fila, "Estado"] = nuevo_estado
+                
+                # Guardar cambios en el Excel
+                df_cuentas.to_excel(archivo_cuentas, index=False)
+                st.success(f"✅ ¡El estado de la factura se ha actualizado a **{nuevo_estado}** con éxito!")
+                st.rerun()
+    else:
+        st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")
 
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):

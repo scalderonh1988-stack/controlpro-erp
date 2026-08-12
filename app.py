@@ -1762,7 +1762,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
 
     # 2. Visualización de Resultado de Venta (Transacción Completada)
     if st.session_state.ultimo_recibo is not None:
-        st.success("🎉 ¡Transacción completada!")
+        st.success("🎉 ¡Transacción completada y archivada con éxito!")
         st.markdown(f'<div class="ticket-box">{st.session_state.ultimo_recibo}</div>', unsafe_allow_html=True)
       
         if 'items_recibo_actual' not in st.session_state or st.session_state.items_recibo_actual is None:
@@ -1841,6 +1841,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         else:
                             df_nuevo.to_excel(archivo_mensual, index=False)
 
+                        # Registrar en Cuentas por Cobrar si aplica
                         if any(p in forma_pago.lower() for p in ["fiado", "crédito", "credito", "consignación", "consignacion"]):
                             archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
                             registro_cxp = pd.DataFrame([{
@@ -1860,7 +1861,8 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
                        
                         st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
-                        st.session_state.ultimo_recibo = f"""
+                        
+                        texto_recibo = f"""
 ========================================
        {cfg.get('nombre_empresa', 'MI EMPRESA')}
        RUT: {cfg.get('rut_empresa', '00.000.000-0')}
@@ -1878,6 +1880,23 @@ PAGO: {forma_pago.upper()}
 ========================================
 {cfg.get('pie_pagina', 'Gracias por su preferencia')}
 ========================================"""
+                        
+                        # 🗂️ ARCHIVADOR AUTOMÁTICO POR SUBDIRECTORIOS
+                        try:
+                            # Limpiar nombre del tipo de documento para usarlo como carpeta segura
+                            carpeta_tipo = tipo_documento.lower().replace(" ", "_").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+                            dir_archivador = os.path.join(ruta_negocio, "archivador_ventas", carpeta_tipo)
+                            os.makedirs(dir_archivador, exist_ok=True)
+                            
+                            nombre_archivo_doc = f"TX_{fecha_hora_actual.strftime('%Y%m%d_%H%M%S')}.txt"
+                            ruta_completa_doc = os.path.join(dir_archivador, nombre_archivo_doc)
+                            
+                            with open(ruta_completa_doc, "w", encoding="utf-8") as f_doc:
+                                f_doc.write(texto_recibo)
+                        except Exception as e:
+                            print(f"Error al guardar en el archivador: {e}")
+
+                        st.session_state.ultimo_recibo = texto_recibo
                         st.session_state.estado_pago = False
                         st.rerun()
 

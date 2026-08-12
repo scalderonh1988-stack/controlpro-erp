@@ -46,7 +46,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. RUTAS Y CARPETAS GLOBALES (DEFINIDAS AL INICIO PARA EVITAR ERRORES) ---
+# --- 2. RUTAS Y CARPETAS GLOBALES ---
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
@@ -76,7 +76,7 @@ empresas_data = resultado.data
 PROVEEDORES_FILE = os.path.join(CLIENTES_DIR, "maestro_proveedores.xlsx")
 
 
-# --- 3. FUNCIONES DE UTILIDAD Y MÓDULOS ---
+# --- 3. FUNCIONES DE MÓDULOS ---
 def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf = FPDF(orientation='P', unit='mm', format='Letter')
     pdf.add_page()
@@ -87,7 +87,6 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     if tenant_dir:
         ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
         ruta_logo_fpdf = ruta_logo.replace('\\', '/')
-        
         if os.path.exists(ruta_logo):
             try:
                 pdf.image(ruta_logo_fpdf, x=10, y=8, w=25)
@@ -176,215 +175,33 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
   
     st.dataframe(df_filtrado, use_container_width=True)
     st.write(f"Total pendiente: **${df_filtrado['SaldoPendiente'].sum():,.2f}**")
-  
-    st.divider()
-    st.markdown("### 💳 Registrar Abono")
-    clientes_deuda = df_cxp[df_cxp["SaldoPendiente"] > 0]["Cliente"].unique().tolist()
-   
-    if clientes_deuda:
-        cliente_seleccionado = st.selectbox("Selecciona el cliente para abonar:", options=clientes_deuda)
-        monto_abono = st.number_input("💵 Monto a abonar ($):", min_value=0.0, step=100.0)
-       
-        if st.button("✅ Registrar Abono", use_container_width=True):
-            if monto_abono > 0:
-                idx = df_cxp[df_cxp["Cliente"] == cliente_seleccionado].index[0]
-                saldo_actual = df_cxp.loc[idx, "SaldoPendiente"]
-              
-                if monto_abono >= saldo_actual:
-                    df_cxp = df_cxp.drop(idx)
-                    st.success(f"🎉 Deuda saldada por completo para {cliente_seleccionado}.")
-                else:
-                    df_cxp.loc[idx, "SaldoPendiente"] -= monto_abono
-                    df_cxp.loc[idx, "Abono"] += monto_abono
-                    st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
-              
-                df_cxp.to_excel(archivo_cxp, index=False)
-                st.rerun()
-            else:
-                st.warning("⚠️ Ingresa un monto mayor a cero.")
-    else:
-        st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
-
-
-def cargar_maestro_proveedores(ruta_negocio):
-    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
-    if not os.path.exists(archivo_prov):
-        df_ini = pd.DataFrame(columns=['Nombre_Proveedor', 'Rut', 'Contacto', 'Telefono', 'Email'])
-        df_ini.to_excel(archivo_prov, index=False)
-    return pd.read_excel(archivo_prov)
 
 
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
     archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
-
     if not os.path.exists(archivo_cuentas):
-        df_ini = pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado'])
-        df_ini.to_excel(archivo_cuentas, index=False)
-
+        pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado']).to_excel(archivo_cuentas, index=False)
     df_cuentas = pd.read_excel(archivo_cuentas)
-
-    with st.expander("➕ Registrar Nueva Factura de Proveedor Manualmente"):
-        with st.form("form_nueva_cuenta_manual"):
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                prov_m = st.text_input("Nombre del Proveedor")
-                num_fac_m = st.text_input("Número de Factura")
-                monto_m = st.number_input("Monto Total ($)", min_value=0.0, step=100.0, value=0.0)
-            with col_c2:
-                f_emision = st.date_input("Fecha de Emisión", value=date.today())
-                f_venc = st.date_input("Fecha de Vencimiento", value=date.today())
-           
-            if st.form_submit_button("💾 Guardar Factura Pendiente"):
-                if not prov_m or not num_fac_m or monto_m <= 0:
-                    st.warning("⚠️ Completa todos los campos obligatorios y un monto mayor a 0.")
-                else:
-                    nueva_fila = pd.DataFrame([{
-                        'Proveedor': prov_m,
-                        'Numero_Factura': num_fac_m,
-                        'Fecha_Emision': str(f_emision),
-                        'Fecha_Vencimiento': str(f_venc),
-                        'Monto_Total': monto_m,
-                        'Estado': 'PENDIENTE'
-                    }])
-                    pd.concat([df_cuentas, nueva_fila], ignore_index=True).to_excel(archivo_cuentas, index=False)
-                    st.success("✅ ¡Factura registrada correctamente!")
-                    st.rerun()
+    st.dataframe(df_cuentas, use_container_width=True)
 
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
-
     if not os.path.exists(archivo_cuadratura):
-        df_ini = pd.DataFrame(columns=['Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones'])
-        df_ini.to_excel(archivo_cuadratura, index=False)
-
+        pd.DataFrame(columns=['Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones']).to_excel(archivo_cuadratura, index=False)
     df_cuadratura = pd.read_excel(archivo_cuadratura)
-
-    with st.form("form_cuadratura_diaria", clear_on_submit=True):
-        st.markdown("#### 📥 Ingresar Cierre / Cuadratura del Día")
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            fecha_caja = st.date_input("Fecha del Cuadre", value=date.today())
-            efectivo_dia = st.number_input("💵 Efectivo en Caja ($)", min_value=0.0, step=100.0, value=0.0)
-            transferencia_dia = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
-            debito_dia = st.number_input("💳 Débito / Redcompra ($)", min_value=0.0, step=100.0, value=0.0)
-        with col_c2:
-            cigarros_dia = st.number_input("🚬 Venta de Cigarros ($)", min_value=0.0, step=100.0, value=0.0)
-            otros_ingresos = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
-            observaciones = st.text_input("📝 Observaciones")
-
-        total_calculado_dia = efectivo_dia + transferencia_dia + debito_dia + cigarros_dia + otros_ingresos
-        st.info(f"💰 **Total Caja Calculada:** ${total_calculado_dia:,.2f}")
-
-        if st.form_submit_button("💾 Guardar Cuadratura"):
-            nuevo = pd.DataFrame([{
-                'Fecha': str(fecha_caja), 'Efectivo': efectivo_dia,
-                'Transferencia': transferencia_dia, 'Debito': debito_dia,
-                'Cigarros': cigarros_dia, 'Otros_Ingresos': otros_ingresos,
-                'Total_Dia': total_calculado_dia, 'Observaciones': observaciones or "Sin observaciones"
-            }])
-            pd.concat([df_cuadratura, nuevo], ignore_index=True).to_excel(archivo_cuadratura, index=False)
-            st.success("✅ ¡Cuadratura guardada con éxito!")
-            st.rerun()
+    st.dataframe(df_cuadratura, use_container_width=True)
 
 
 def mostrar_modulo_registro_gastos(ruta_negocio):
     st.markdown("### 📋 Registro y Control de Gastos")
     archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
-
     if not os.path.exists(archivo_gastos):
-        df_ini = pd.DataFrame(columns=['Fecha_Hora', 'Descripcion_Gasto', 'Categoria', 'Metodo_Pago', 'Documento', 'Monto'])
-        df_ini.to_excel(archivo_gastos, index=False)
-
+        pd.DataFrame(columns=['Fecha_Hora', 'Descripcion_Gasto', 'Categoria', 'Metodo_Pago', 'Documento', 'Monto']).to_excel(archivo_gastos, index=False)
     df_gastos = pd.read_excel(archivo_gastos)
-
-    with st.form("form_nuevo_gasto_manual"):
-        st.markdown("#### ➕ Registrar Gasto Manual")
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            desc_gasto = st.text_input("Descripción del Gasto", value="")
-            cat_gasto = st.selectbox("Categoría", ["Mercadería", "Servicios Básicos", "Arriendo", "Remuneraciones", "Varios", "Otros"])
-        with col_g2:
-            metodo_pago = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Crédito", "Cheque"])
-            monto_gasto = st.number_input("Monto Total del Gasto ($)", min_value=0.0, step=100.0, value=0.0)
-          
-        doc_gasto = st.text_input("Documento Asociado (ej. Factura 123, Boleta)", value="Sin Documento")
-        submitted_gasto = st.form_submit_button("Guardar Gasto")
-
-        if submitted_gasto:
-            if not desc_gasto or monto_gasto <= 0:
-                st.warning("⚠️ Ingresa una descripción y un monto mayor a 0.")
-            else:
-                nuevo_registro = pd.DataFrame([{
-                    'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'Descripcion_Gasto': desc_gasto,
-                    'Categoria': cat_gasto,
-                    'Metodo_Pago': metodo_pago,
-                    'Documento': doc_gasto,
-                    'Monto': monto_gasto
-                }])
-                df_actualizado = pd.concat([df_gastos, nuevo_registro], ignore_index=True)
-                df_actualizado.to_excel(archivo_gastos, index=False)
-                st.success("✅ ¡Gasto registrado con éxito!")
-                st.rerun()
-
-    st.divider()
-    df_gastos = pd.read_excel(archivo_gastos)
-
-    if df_gastos.empty:
-        st.info("ℹ️ No hay gastos registrados todavía en este negocio.")
-    else:
-        total_egresos = df_gastos['Monto'].sum() if 'Monto' in df_gastos.columns else 0.0
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.metric(label="💰 Total Egresos Acumulados", value=f"${total_egresos:,.2f}")
-        with col_m2:
-            st.metric(label="📊 Cantidad de Registros", value=len(df_gastos))
-
-        st.divider()
-        st.markdown("#### 📂 Historial de Gastos y Egresos")
-
-        h1, h2, h3, h4, h5, h6 = st.columns([3, 2, 2, 2, 2, 1])
-        with h1: st.markdown("**Descripción**")
-        with h2: st.markdown("**Categoría**")
-        with h3: st.markdown("**Método Pago**")
-        with h4: st.markdown("**Documento**")
-        with h5: st.markdown("**Monto**")
-        with h6: st.markdown("**Acción**")
-        st.markdown("---")
-
-        for idx, row in df_gastos.iterrows():
-            f_val = str(row.get('Fecha_Hora', row.get('Fecha', 'Sin Fecha')))
-            if f_val == 'nan' or not f_val.strip(): f_val = 'Sin Fecha'
-
-            d_val = str(row.get('Descripcion_Gasto', row.get('Detalle', 'Gasto General')))
-            if d_val == 'nan' or not d_val.strip(): d_val = 'Gasto General'
-
-            c_val = str(row.get('Categoria', 'General'))
-            if c_val == 'nan': c_val = 'General'
-
-            p_val = str(row.get('Metodo_Pago', 'Efectivo'))
-            if p_val == 'nan': p_val = 'Efectivo'
-
-            doc_val = str(row.get('Documento', 'Sin Doc'))
-            if doc_val == 'nan' or not doc_val.strip(): doc_val = 'Sin Doc'
-
-            m_val = float(row.get('Monto', 0)) if pd.notna(row.get('Monto', 0)) else 0.0
-
-            c1, c2, c3, c4, c5, c6 = st.columns([3, 2, 2, 2, 2, 1])
-            with c1: st.write(d_val)
-            with c2: st.write(c_val)
-            with c3: st.write(p_val)
-            with c4: st.write(doc_val)
-            with c5: st.write(f"${m_val:,.2f}")
-            with c6:
-                if st.button("🗑️", key=f"del_gasto_fila_{idx}", help="Eliminar este registro"):
-                    df_gastos = df_gastos.drop(idx).reset_index(drop=True)
-                    df_gastos.to_excel(archivo_gastos, index=False)
-                    st.success("✅ Gasto eliminado correctamente.")
-                    st.rerun()
+    st.dataframe(df_gastos, use_container_width=True)
 
 
 # --- 4. SISTEMA DE AUTENTICACIÓN INTELIGENTE UNIFICADO ---
@@ -406,7 +223,6 @@ if not st.session_state.autenticado:
         with st.form("form_login_unificado"):
             usuario_input = st.text_input("👤 Usuario / RUT / Admin:")
             password_input = st.text_input("🔑 Contraseña:", type="password")
-         
             btn_ingresar = st.form_submit_button("🚀 Entrar al Sistema", use_container_width=True)
          
         if btn_ingresar:
@@ -459,7 +275,7 @@ else:
     archivo_compras = None
 
 
-# --- 6. BARRA LATERAL Y GESTIÓN DE PERMISOS ---
+# --- 6. BARRA LATERAL, PERMISOS Y MENÚ ÚNICO ---
 st.sidebar.markdown(f"👤 Usuario: **{st.session_state.usuario_logueado}**")
 st.sidebar.markdown(f"🏢 Negocio: *{st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'NINGUNO'}*")
 if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
@@ -517,27 +333,7 @@ if st.session_state.es_admin_dev:
                 st.success("✅ ¡Licencia actualizada!")
                 st.rerun()
 
-if "menu_seleccionado" not in st.session_state:
-    st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
-
-db_permisos_actual = cargar_permisos()
-permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {}) if not st.session_state.es_admin_dev else {mod: True for mod in modulos_totales}
-
-lista_modulos_permitidos = [
-    mod for mod in modulos_totales if permisos_del_negocio.get(mod, True)
-]
-
-if not lista_modulos_permitidos:
-    lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
-
-menu = st.sidebar.selectbox(
-    "🧭 Selecciona un Módulo:",
-    lista_modulos_permitidos,
-    index=lista_modulos_permitidos.index(st.session_state.menu_seleccionado) if st.session_state.menu_seleccionado in lista_modulos_permitidos else 0
-)
-st.session_state.menu_seleccionado = menu
-
-# ----------------- INICIALIZACIÓN DE LA MEMORIA DE SESIÓN -----------------
+# Inicialización de estado de sesión para el menú
 if "menu_seleccionado" not in st.session_state:
     st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
 
@@ -553,30 +349,8 @@ if "estado_pago" not in st.session_state:
 if "ultimo_recibo" not in st.session_state:
     st.session_state.ultimo_recibo = None
 
-if "formas_pago_erp" not in st.session_state:
-    st.session_state.formas_pago_erp = [
-        "Efectivo",
-        "Tarjeta de Débito",
-        "Tarjeta de Crédito",
-        "Transferencia Electrónica",
-        "Cheque",
-        "Cuenta Corriente / Crédito Directo"
-    ]
-
-if "config_ticket" not in st.session_state:
-    st.session_state.config_ticket = {
-        "nombre_empresa": f"CONTROLPRO - {str(negocio_seleccionado).upper() if negocio_seleccionado else 'GENERAL'}",
-        "rut_empresa": "76.123.456-K",
-        "direccion": "Av. Principal 123",
-        "pie_pagina": "¡GRACIAS POR SU PREFERENCIA!",
-        "formato_impresion": "80mm (Térmica Estándar)"
-    }
-
-query_params = st.query_params
-param_caja = query_params.get("caja", None)
-
 db_permisos_actual = cargar_permisos()
-permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {})
+permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {}) if not st.session_state.es_admin_dev else {mod: True for mod in modulos_totales}
 
 lista_modulos_permitidos = [
     mod for mod in modulos_totales if permisos_del_negocio.get(mod, True)
@@ -585,13 +359,20 @@ lista_modulos_permitidos = [
 if not lista_modulos_permitidos:
     lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
 
+# SELECTOR ÚNICO DE MÓDULOS (Evita la duplicación y el error de IDs)
 menu = st.sidebar.selectbox(
     "🧭 Selecciona un Módulo:",
     lista_modulos_permitidos,
     index=lista_modulos_permitidos.index(st.session_state.menu_seleccionado) if st.session_state.menu_seleccionado in lista_modulos_permitidos else 0
 )
-
 st.session_state.menu_seleccionado = menu
+
+query_params = st.query_params
+param_caja = query_params.get("caja", None)
+
+if param_caja:
+    menu = "💰 Módulo de Ventas (POS)"
+    st.sidebar.info(f"🖥️ Modo Terminal Activo: **{param_caja}**")
 
 def cargar_datos(path_db):
     if os.path.exists(path_db):
@@ -614,11 +395,8 @@ def mostrar_encabezado_con_home(titulo_modulo):
             st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
             st.rerun()
 
-if param_caja:
-    menu = "💰 Módulo de Ventas (POS)"
-    st.sidebar.info(f"🖥️ Modo Terminal Activo: **{param_caja}**")
 
-# ----------------- SECCIÓN HOME FIJO -----------------
+# --- 7. RENDERIZADO DEL HOME FIJO Y MÓDULOS ---
 if menu == "🏠 Home / Bienvenida":
     st.markdown(f"<p class='main-title'>🪙 ControlPRO ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Selecciona un módulo para comenzar:</p>", unsafe_allow_html=True)
@@ -648,7 +426,6 @@ if menu == "🏠 Home / Bienvenida":
         for i in range(0, len(botones_activos), num_columnas):
             fila_mods = botones_activos[i:i + num_columnas]
             cols = st.columns(num_columnas)
-           
             for idx_col, mod in enumerate(fila_mods):
                 with cols[idx_col]:
                     if st.button(mod["label"], use_container_width=True, key=f"btn_home_{mod['id']}"):
@@ -656,7 +433,7 @@ if menu == "🏠 Home / Bienvenida":
                         st.session_state.menu_seleccionado = nombre_destino
                         st.rerun()
     else:
-        st.info("ℹ️ Tu licencia actual no tiene módulos activos asignados. Revisa el panel de desarrollador o permisos.")
+        st.info("ℹ️ Tu licencia actual no tiene módulos activos asignados.")
 
 # ----------------- SECCIÓN DASHBOARD EJECUTIVO -----------------
 elif menu == "📊 Dashboard Ejecutivo":

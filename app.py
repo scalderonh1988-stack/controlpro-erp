@@ -53,117 +53,105 @@ if "es_admin" not in st.session_state:
 if "cliente_logueado" not in st.session_state:
     st.session_state["cliente_logueado"] = None
 
-# --- 1. SI NO HA INICIADO SESIÓN NADIE (MOSTRAR LOGIN ÚNICO) ---
-if not st.session_state["es_admin"] and not st.session_state["cliente_logueado"]:
-    st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
-   
+# --- 1. SI UN CLIENTE YA INICIÓ SESIÓN CORRECTAMENTE ---
+if st.session_state["cliente_logueado"]:
+    ruta_negocio_cliente = os.path.join(CLIENTES_DIR, st.session_state["cliente_logueado"])
+    st.sidebar.markdown(f"👤 **Cliente Conectado:** {st.session_state['cliente_logueado']}")
+    if st.sidebar.button("🚪 Cerrar Sesión Cliente"):
+        st.session_state["cliente_logueado"] = None
+        st.rerun()
+    st.stop()
+
+# --- 2. SI ERES TÚ (ADMINISTRADOR) CON TU SESIÓN ACTIVA ---
+if st.session_state["es_admin"]:
+    with st.sidebar:
+        st.markdown("### 🛠️ Control Maestro")
+        if st.button("🔒 Cerrar Sesión Admin"):
+            st.session_state["es_admin"] = False
+            st.rerun()
+           
+        st.divider()
+        st.markdown("#### ➕ Registrar Nuevo Cliente")
+       
+        with st.form("form_crear_cliente"):
+            id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+            nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+            password_cliente = st.text_input("Contraseña para el Cliente", type="password")
+            fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+           
+            m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
+            m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
+            m_inv = st.checkbox("📦 Inventario y Productos", value=True)
+            m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
+            m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
+            m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
+            m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
+            m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
+            m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
+            m_conf = st.checkbox("⚙️ Configuración General", value=True)
+            m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
+            m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
+           
+            guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
+            if guardar:
+                if not id_negocio or not nombre_comercial:
+                    st.warning("⚠️ Debes completar el ID y el Nombre.")
+                else:
+                    st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                    st.rerun()
+
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    supabase: Client = create_client(url, key)
+
+    st.markdown("### 📊 Panel de Control Maestro (Lista de Empresas)")
+    resultado = supabase.table("empresas").select("*").execute()
+    empresas_data = resultado.data
+    st.dataframe(empresas_data, use_container_width=True)
+    st.stop()
+
+# --- 3. PESTAÑAS SEPARADAS DE ACCESO (CLIENTES VS ADMIN) ---
+st.markdown("<div class='main-title'>ControlPRO ERP - Portal de Acceso</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>Selecciona tu tipo de acceso al sistema</div>", unsafe_allow_html=True)
+
+tab_cliente, tab_admin = st.tabs(["👥 Acceso Clientes", "🛠️ Acceso Desarrollador (Admin)"])
+
+with tab_cliente:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        with st.form("form_login_unificado"):
-            usuario_ingresado = st.text_input("Usuario / RUT:")
-            password_ingresada = st.text_input("Contraseña:", type="password")
-            submit_login = st.form_submit_button("🚀 Entrar al Sistema")
-           
-            if submit_login:
-                # A) Si eres tú (Desarrollador/Admin)
-                if usuario_ingresado == "15382273-5" and password_ingresada == "SIMON1908": # O tu usuario admin
+        with st.form("form_login_cliente_directo"):
+            st.markdown("#### Iniciar Sesión en tu Negocio")
+            rut_cli = st.text_input("ID o RUT de tu Negocio (ej: negocio_1):")
+            pass_cli = st.text_input("Contraseña del Negocio:", type="password")
+            entrar_cli = st.form_submit_button("🚀 Entrar a mi ERP")
+            
+            if entrar_cli:
+                carpeta_candidata = os.path.join(CLIENTES_DIR, rut_cli.strip())
+                if os.path.exists(carpeta_candidata):
+                    st.session_state["cliente_logueado"] = rut_cli.strip()
+                    st.session_state["negocio_seleccionado"] = rut_cli.strip()
+                    st.success("✅ ¡Bienvenido a tu sistema!")
+                    st.rerun()
+                else:
+                    st.error("❌ Negocio no encontrado.")
+
+with tab_admin:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("form_login_admin_maestro"):
+            st.markdown("#### Panel de Control Maestro")
+            user_adm = st.text_input("Usuario Administrador:")
+            pass_adm = st.text_input("Contraseña Maestra:", type="password")
+            entrar_adm = st.form_submit_button("🔐 Acceder como Desarrollador")
+            
+            if entrar_adm:
+                if user_adm == "admin" and pass_adm == "SIMON1908":
                     st.session_state["es_admin"] = True
                     st.rerun()
                 else:
-                    # B) Validar si es un cliente registrado en Supabase o en tus carpetas
-                    # Aquí conectamos a Supabase solo para verificar el RUT y contraseña del cliente
-                    try:
-                        url = st.secrets["supabase"]["url"]
-                        key = st.secrets["supabase"]["key"]
-                        supabase: Client = create_client(url, key)
-                        
-                        # Buscamos si el RUT existe en la tabla empresas
-                        resultado = supabase.table("empresas").select("*").eq("rut_empresa", usuario_ingresado.strip()).execute()
-                        datos_empresa = resultado.data
-                        
-                        if datos_empresa:
-                            # Si el cliente existe, validamos su acceso directo
-                            st.session_state["cliente_logueado"] = usuario_ingresado.strip()
-                            st.session_state["negocio_seleccionado"] = datos_empresa[0].get("id") # O su carpeta asociada
-                            st.success("✅ Acceso exitoso")
-                            st.rerun()
-                        else:
-                            st.error("❌ RUT o contraseña incorrectos")
-                    except Exception as e:
-                        st.error(f"Error al conectar con la base de datos: {e}")
-                        
-    # 🛑 Esto detiene la ejecución para que los clientes o usuarios sin sesión no vean nada más
-    st.stop()
+                    st.error("❌ Credenciales de desarrollador inválidas.")
 
-# --- 🛠️ VISTA EXCLUSIVA DEL ADMINISTRADOR (DESDE AQUÍ HACIA ABAJO) ---
-with st.sidebar:
-    st.markdown("### 🛠️ Control Maestro")
-    if st.button("🔒 Cerrar Sesión"):
-        st.session_state["es_admin"] = False
-        st.rerun()
-       
-    st.divider()
-    st.markdown("#### ➕ Registrar Nuevo Cliente")
-   
-    with st.form("form_crear_cliente"):
-        id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-        nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-        password_cliente = st.text_input("Contraseña para el Cliente", type="password")
-        fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
-       
-        st.markdown("*Habilitar Módulos:*")
-        m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
-        m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
-        m_inv = st.checkbox("📦 Inventario y Productos", value=True)
-        m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
-        m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
-        m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
-        m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
-        m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
-        m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
-        m_conf = st.checkbox("⚙️ Configuración General", value=True)
-        m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
-        m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
-       
-        guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
-       
-        if guardar:
-            if not id_negocio or not nombre_comercial:
-                st.warning("⚠️ Debes completar el ID y el Nombre.")
-            else:
-                datos_nuevo = {
-                    "nombre": nombre_comercial,
-                    "password": password_cliente,
-                    "fecha_expiracion": str(fecha_exp),
-                    "activo": True,
-                    "modulos": {
-                        "home": m_home,
-                        "dashboard": m_dash,
-                        "inventario": m_inv,
-                        "pos": m_pos,
-                        "compras": m_comp,
-                        "mermas": m_mermas,
-                        "informes": m_inf,
-                        "control_inventario": m_ctrl,
-                        "finanzas": m_fin,            
-                        "configuracion": m_conf,
-                        "cuadratura": m_cuad,
-                        "cobrar": m_cxp
-                    }
-                }
-                st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
-                st.rerun()
-
-# 🔌 Conexión a Supabase (Solo se ejecuta si `es_admin` es True)
-url = st.secrets["supabase"]["url"]
-key = st.secrets["supabase"]["key"]
-supabase: Client = create_client(url, key)
-
-st.markdown("### 📊 Panel de Control Maestro (Lista de Empresas)")
-resultado = supabase.table("empresas").select("*").execute()
-empresas_data = resultado.data
-st.dataframe(empresas_data, use_container_width=True)
+st.stop()
 
 def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf = FPDF(orientation='P', unit='mm', format='Letter')

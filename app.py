@@ -12,6 +12,32 @@ from supabase import create_client, Client
 from fpdf import FPDF
 from PIL import Image
 
+def cargar_maestro_proveedores(ruta_negocio):
+    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
+    if not os.path.exists(archivo_prov):
+        df_ini = pd.DataFrame(columns=['Nombre_Proveedor', 'Rut', 'Contacto', 'Telefono', 'Email'])
+        df_ini.to_excel(archivo_prov, index=False)
+    return pd.read_excel(archivo_prov)
+
+def guardar_nuevo_proveedor(ruta_negocio, nombre, rut="", contacto="", telefono="", email=""):
+    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
+    df_prov = cargar_maestro_proveedores(ruta_negocio)
+    
+    nombre_limpio = str(nombre).strip().upper()
+    if not df_prov.empty and nombre_limpio in df_prov['Nombre_Proveedor'].str.upper().values:
+        return 
+        
+    nuevo = pd.DataFrame([{
+        'Nombre_Proveedor': nombre.strip(),
+        'Rut': rut,
+        'Contacto': contacto,
+        'Telefono': telefono,
+        'Email': email
+    }])
+    
+    df_actualizado = pd.concat([df_prov, nuevo], ignore_index=True)
+    df_actualizado.to_excel(archivo_prov, index=False)
+
 # ⚙️ 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE LO PRIMERO)
 st.set_page_config(
     page_title="ControlPRO ERP - Gestión Inteligente",
@@ -232,7 +258,6 @@ if not st.session_state.autenticado:
             if not usuario_limpio or not password_limpio:
                 st.error("❌ Debes ingresar tanto el usuario como la contraseña.")
             else:
-                # 🛠️ 1. Validación de Administrador / Desarrollador Maestro
                 if usuario_limpio.lower() in ["admin", "desarrollador", "simon"] and password_limpio == "SIMON1908":
                     st.session_state.autenticado = True
                     st.session_state.es_admin_dev = True
@@ -242,7 +267,6 @@ if not st.session_state.autenticado:
                     st.success("🛠️ ¡Bienvenido Maestro! Accediendo al entorno completo...")
                     st.rerun()
                 else:
-                    # 🏢 2. Validación para Clientes en Supabase
                     empresa_encontrada = next((emp for emp in empresas_data if emp["rut_empresa"] == usuario_limpio), None)
 
                     if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
@@ -273,6 +297,9 @@ else:
     ruta_negocio = CLIENTES_DIR
     archivo_base = None
     archivo_compras = None
+
+# Sincronizamos la variable global requerida por otras funciones
+st.session_state.negocio_seleccionado = negocio_seleccionado
 
 
 # --- 6. BARRA LATERAL, PERMISOS Y MENÚ ÚNICO ---
@@ -312,7 +339,6 @@ modulos_totales = [
     "⚙️ Configuración General"
 ]
 
-# Panel de Desarrollador Integrado
 if st.session_state.es_admin_dev:
     with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         st.success("✔️ Modo Desarrollador Activo")
@@ -365,7 +391,7 @@ if st.session_state.es_admin_dev:
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                         st.rerun()
 
-# --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN (SOLUCIÓN DEL ERROR) ---
+# --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN ---
 if "menu_seleccionado" not in st.session_state:
     st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
 
@@ -381,7 +407,6 @@ if "estado_pago" not in st.session_state:
 if "ultimo_recibo" not in st.session_state:
     st.session_state.ultimo_recibo = None
 
-# 🛑 AQUÍ SE AÑADE LA VARIABLE QUE FALTABA Y CAUSABA EL ERROR EN CONFIGURACIÓN
 if "formas_pago_erp" not in st.session_state:
     st.session_state.formas_pago_erp = [
         "Efectivo",
@@ -477,6 +502,120 @@ if menu == "🏠 Home / Bienvenida":
                         st.rerun()
     else:
         st.info("ℹ️ Tu licencia actual no tiene módulos activos asignados.")
+
+# --- 9. RENDERIZADO DE MÓDULOS DE INVENTARIO Y REGISTROS ---
+elif menu == "📦 Inventario y Productos":
+    mostrar_encabezado_con_home("📦 Administración de Inventario")
+    
+    tab_inv1, tab_inv2, tab_inv3 = st.tabs(["📦 Productos", "👥 Clientes", "🚚 Proveedores"])
+    
+    with tab_inv1:
+        st.markdown("#### ➕ Registrar o Gestionar Productos")
+        if archivo_base and os.path.exists(archivo_base):
+            st.success(f"Base de datos conectada con éxito.")
+            df_inv = pd.read_excel(archivo_base, dtype={'Código': str})
+            st.dataframe(df_inv, use_container_width=True)
+            
+            with st.form("form_nuevo_producto", clear_on_submit=True):
+                st.markdown("##### Nuevo Producto")
+                c_cod = st.text_input("Código")
+                c_desc = st.text_input("Descripción")
+                c_costo = st.number_input("Costo ($)", min_value=0.0, step=100.0)
+                c_pv = st.number_input("Precio de Venta ($)", min_value=0.0, step=100.0)
+                c_stock = st.number_input("Stock Inicial", min_value=0, step=1)
+                
+                btn_g_prod = st.form_submit_button("💾 Guardar Producto")
+                if btn_g_prod:
+                    if not c_cod or not c_desc:
+                        st.warning("⚠️ Ingresa el código y la descripción.")
+                    else:
+                        nuevo_p = pd.DataFrame([{
+                            'Código': str(c_cod),
+                            'Descripción': c_desc,
+                            'Costo': c_costo,
+                            'Precio de Venta': c_pv,
+                            'Stock': c_stock,
+                            'Activo': 'Si'
+                        }])
+                        df_act = pd.concat([df_inv, nuevo_p], ignore_index=True)
+                        df_act.to_excel(archivo_base, index=False)
+                        st.success("✅ ¡Producto registrado con éxito!")
+                        st.rerun()
+        else:
+            st.warning("⚠️ No se encontró la base de datos de productos para este negocio.")
+
+    with tab_inv2:
+        st.markdown("#### 👥 Maestro de Clientes")
+        archivo_clientes = os.path.join(ruta_negocio, "Maestro_Clientes.xlsx")
+        if not os.path.exists(archivo_clientes):
+            pd.DataFrame(columns=['Nombre_Cliente', 'Rut', 'Telefono', 'Email', 'Direccion']).to_excel(archivo_clientes, index=False)
+        
+        df_clientes = pd.read_excel(archivo_clientes)
+        st.dataframe(df_clientes, use_container_width=True)
+        
+        with st.form("form_nuevo_cliente_local", clear_on_submit=True):
+            st.markdown("##### Registrar Cliente Nuevo")
+            cl_nom = st.text_input("Nombre / Razón Social")
+            cl_rut = st.text_input("RUT / Identificación")
+            cl_tel = st.text_input("Teléfono")
+            cl_mail = st.text_input("Correo Electrónico")
+            cl_dir = st.text_input("Dirección")
+            
+            btn_g_cliente = st.form_submit_button("💾 Guardar Cliente")
+            if btn_g_cliente:
+                if not cl_nom:
+                    st.warning("⚠️ Ingresa el nombre del cliente.")
+                else:
+                    nuevo_c = pd.DataFrame([{
+                        'Nombre_Cliente': cl_nom,
+                        'Rut': cl_rut,
+                        'Telefono': cl_tel,
+                        'Email': cl_mail,
+                        'Direccion': cl_dir
+                    }])
+                    df_c_act = pd.concat([df_clientes, nuevo_c], ignore_index=True)
+                    df_c_act.to_excel(archivo_clientes, index=False)
+                    st.success("✅ ¡Cliente guardado con éxito!")
+                    st.rerun()
+
+    with tab_inv3:
+        st.markdown("#### 🚚 Directorio de Proveedores")
+        df_proveedores = cargar_maestro_proveedores(ruta_negocio)
+        st.dataframe(df_proveedores, use_container_width=True)
+        
+        with st.form("form_nuevo_proveedor_local", clear_on_submit=True):
+            st.markdown("##### Registrar Proveedor Nuevo")
+            pr_nom = st.text_input("Nombre del Proveedor")
+            pr_rut = st.text_input("RUT Proveedor")
+            pr_cont = st.text_input("Persona de Contacto")
+            pr_tel = st.text_input("Teléfono")
+            pr_mail = st.text_input("Email")
+            
+            btn_g_prov = st.form_submit_button("💾 Guardar Proveedor")
+            if btn_g_prov:
+                if not pr_nom:
+                    st.warning("⚠️ Ingresa el nombre del proveedor.")
+                else:
+                    guardar_nuevo_proveedor(ruta_negocio, pr_nom, pr_rut, pr_cont, pr_tel, pr_mail)
+                    st.success("✅ ¡Proveedor guardado con éxito!")
+                    st.rerun()
+
+elif menu == "📊 Módulo de Finanzas":
+    mostrar_encabezado_con_home("📊 Panel de Control Financiero")
+    tab_fin1, tab_fin2, tab_fin3 = st.tabs(["💳 Cuentas por Pagar", "📅 Calendario de Pagos", "📋 Registro de Gastos"])
+    with tab_fin1:
+        mostrar_modulo_cuentas_por_pagar(ruta_negocio)
+    with tab_fin2:
+        mostrar_modulo_calendario_pagos(ruta_negocio)
+    with tab_fin3:
+        mostrar_modulo_registro_gastos(ruta_negocio)
+
+elif menu == "📒 Cuadratura Diaria":
+    mostrar_encabezado_con_home("📒 Cuadratura Diaria")
+    mostrar_modulo_cuadratura_diaria(ruta_negocio)
+
+elif menu == "📑 Cuentas por Cobrar":
+    mostrar_modulo_cuentas_por_cobrar(ruta_negocio)
 
 # ----------------- SECCIÓN DASHBOARD EJECUTIVO -----------------
 elif menu == "📊 Dashboard Ejecutivo":

@@ -180,11 +180,11 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
    
     return pdf.output(dest='S')
 
-
 def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     if st.button("⬅️ Volver al Home", use_container_width=True):
         st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
         st.rerun()
+        
     st.markdown("### 📑 Gestión de Cuentas por Cobrar")
     archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
   
@@ -193,6 +193,28 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
         return
 
     df_cxp = pd.read_excel(archivo_cxp)
+    
+    # --- CÁLCULO DE DÍAS DE ATRASO ---
+    if not df_cxp.empty:
+        # Asegurarnos de que exista una columna de fecha de vencimiento (si se llama FechaVencimiento o Vencimiento)
+        col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
+        
+        if col_venc:
+            hoy = pd.to_datetime(date.today())
+            # Convertir la columna de vencimiento a formato fecha
+            fechas_venc = pd.to_datetime(df_cxp[col_venc], errors='coerce')
+            
+            # Calcular días de diferencia solo para los que tienen saldo pendiente > 0 o en general
+            dias_atraso = (hoy - fechas_venc).dt.days
+            
+            # Si el saldo ya está pagado o al día, los días de atraso se fijan en 0
+            dias_atraso = dias_atraso.apply(lambda x: x if x > 0 else 0)
+            
+            # Insertar o actualizar la columna en el DataFrame visual
+            df_cxp["DiasAtraso"] = dias_atraso
+        else:
+            df_cxp["DiasAtraso"] = 0
+
     cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
   
     df_filtrado = df_cxp.copy()
@@ -200,8 +222,45 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
         df_filtrado = df_filtrado[df_filtrado["Cliente"].str.contains(cliente_filtro, case=False, na=False)]
   
     st.dataframe(df_filtrado, use_container_width=True)
-    st.write(f"Total pendiente: **${df_filtrado['SaldoPendiente'].sum():,.2f}**")
-
+    
+    total_pendiente = df_filtrado['SaldoPendiente'].sum() if 'SaldoPendiente' in df_filtrado.columns else 0.0
+    st.write(f"Total pendiente: **${total_pendiente:,.2f}**")
+  
+    st.divider()
+    st.markdown("### 💳 Registrar Abono")
+    
+    clientes_deuda = []
+    if "SaldoPendiente" in df_cxp.columns and "Cliente" in df_cxp.columns:
+        clientes_deuda = df_cxp[df_cxp["SaldoPendiente"] > 0]["Cliente"].unique().tolist()
+   
+    if clientes_deuda:
+        cliente_seleccionado = st.selectbox("Selecciona el cliente para abonar:", options=clientes_deuda)
+        monto_abono = st.number_input("💵 Monto a abonar ($):", min_value=0.0, step=100.0)
+       
+        if st.button("✅ Registrar Abono", use_container_width=True):
+            if monto_abono > 0:
+                idx = df_cxp[df_cxp["Cliente"] == cliente_seleccionado].index[0]
+                saldo_actual = df_cxp.loc[idx, "SaldoPendiente"]
+              
+                if monto_abono >= saldo_actual:
+                    df_cxp = df_cxp.drop(idx)
+                    st.success(f"🎉 Deuda saldada por completo para {cliente_seleccionado}.")
+                else:
+                    df_cxp.loc[idx, "SaldoPendiente"] -= monto_abono
+                    if "Abono" in df_cxp.columns:
+                        df_cxp.loc[idx, "Abono"] += monto_abono
+                    st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
+              
+                # Guardar sin la columna temporal de visualización DiasAtraso para no duplicarla en el Excel
+                if "DiasAtraso" in df_cxp.columns:
+                    df_cxp = df_cxp.drop(columns=["DiasAtraso"])
+                    
+                df_cxp.to_excel(archivo_cxp, index=False)
+                st.rerun()
+            else:
+                st.warning("⚠️ Ingresa un monto mayor a cero.")
+    else:
+        st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
@@ -1665,14 +1724,21 @@ elif menu == "💰 Módulo de Ventas (POS)":
 
     # 1. Lógica de Selección de Clientes (Solo para Factura/Guía)
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
-        path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
-        try:
-            df_clientes_pos = pd.read_excel(path_db, sheet_name="BD_Clientes", dtype={'RUT': str})
-        except Exception:
-            df_clientes_pos = pd.DataFrame(columns=["RUT", "Nombre", "Teléfono", "Correo", "Dirección"])
+        archivo_clientes_pos = os.path.join(ruta_negocio, "Maestro_Clientes.xlsx")
+        df_clientes_pos = pd.DataFrame()
+        
+        if os.path.exists(archivo_clientes_pos):
+            try:
+                df_clientes_pos = pd.read_excel(archivo_clientes_pos, dtype={'Rut': str})
+            except Exception:
+                df_clientes_pos = pd.DataFrame(columns=["Nombre_Cliente", "Rut", "Telefono", "Email", "Direccion"])
 
-        if not df_clientes_pos.empty and "Nombre" in df_clientes_pos.columns:
-            df_clientes_pos["etiqueta"] = df_clientes_pos["Nombre"] + " (" + df_clientes_pos["RUT"].astype(str) + ")"
+        if not df_clientes_pos.empty and "Nombre_Cliente" in df_clientes_pos.columns:
+            # Asegurar formato de columnas
+            col_nom = "Nombre_Cliente"
+            col_rut = "Rut" if "Rut" in df_clientes_pos.columns else df_clientes_pos.columns[1]
+            
+            df_clientes_pos["etiqueta"] = df_clientes_pos[col_nom].astype(str) + " (" + df_clientes_pos[col_rut].astype(str) + ")"
             lista_clientes = df_clientes_pos["etiqueta"].tolist()
             cliente_elegido = st.selectbox("👤 Selecciona un cliente registrado:", lista_clientes)
           
@@ -1680,7 +1746,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
                 cliente_nombre = cliente_elegido.split(" (")[0]
                 cliente_rut = cliente_elegido.split(" (")[1].replace(")", "")
         else:
-            st.warning("⚠️ No hay clientes registrados.")
+            st.warning("⚠️ No hay clientes registrados en este negocio. Agrégalos en el módulo de Inventario.")
             col_f1, col_f2 = st.columns(2)
             with col_f1: cliente_nombre = st.text_input("Razón Social / Nombre del Cliente")
             with col_f2: cliente_rut = st.text_input("RUT / Identificación Tributaria")

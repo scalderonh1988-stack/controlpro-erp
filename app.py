@@ -312,26 +312,61 @@ modulos_totales = [
     "⚙️ Configuración General"
 ]
 
+# Panel de Desarrollador Integrado (Edición de licencias + Creación de nuevos clientes)
 if st.session_state.es_admin_dev:
     with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         st.success("✔️ Modo Desarrollador Activo")
-        negocio_a_modificar = st.selectbox("Selecciona Negocio a Configurar:", negocios_disponibles, key="sel_dev_negocio")
-       
-        db_permisos = cargar_permisos()
-        if negocio_a_modificar not in db_permisos:
-            db_permisos[negocio_a_modificar] = {mod: True for mod in modulos_totales}
-       
-        with st.form(f"form_licencia_{negocio_a_modificar}"):
-            permisos_temporales = {}
-            for mod in modulos_totales:
-                estado_actual = db_permisos[negocio_a_modificar].get(mod, True)
-                permisos_temporales[mod] = st.checkbox(mod, value=estado_actual, key=f"chk_{negocio_a_modificar}_{mod}")
+        
+        # Pestañas dentro del panel para organizar mejor
+        tab_lic, tab_crear = st.tabs(["⚙️ Licencias", "➕ Crear Negocio"])
+        
+        with tab_lic:
+            negocio_a_modificar = st.selectbox("Selecciona Negocio:", negocios_disponibles, key="sel_dev_negocio")
+            db_permisos = cargar_permisos()
+            if negocio_a_modificar not in db_permisos:
+                db_permisos[negocio_a_modificar] = {mod: True for mod in modulos_totales}
            
-            if st.form_submit_button("💾 Guardar Licencia"):
-                db_permisos[negocio_a_modificar] = permisos_temporales
-                guardar_permisos(db_permisos)
-                st.success("✅ ¡Licencia actualizada!")
-                st.rerun()
+            with st.form(f"form_licencia_{negocio_a_modificar}"):
+                permisos_temporales = {}
+                for mod in modulos_totales:
+                    estado_actual = db_permisos[negocio_a_modificar].get(mod, True)
+                    permisos_temporales[mod] = st.checkbox(mod, value=estado_actual, key=f"chk_{negocio_a_modificar}_{mod}")
+               
+                if st.form_submit_button("💾 Guardar Licencia"):
+                    db_permisos[negocio_a_modificar] = permisos_temporales
+                    guardar_permisos(db_permisos)
+                    st.success("✅ ¡Licencia actualizada!")
+                    st.rerun()
+
+        with tab_crear:
+            with st.form("form_crear_cliente_dev"):
+                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+                password_cliente = st.text_input("Contraseña / RUT", type="password")
+                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+               
+                guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
+               
+                if guardar_nuevo:
+                    if not id_negocio or not nombre_comercial:
+                        st.warning("⚠️ Debes completar el ID y el Nombre.")
+                    else:
+                        datos_nuevo = {
+                            "nombre": nombre_comercial,
+                            "password": password_cliente,
+                            "fecha_expiracion": str(fecha_exp),
+                            "activo": True,
+                            "modulos": {mod: True for mod in modulos_totales}
+                        }
+                        guardar_nuevo_cliente(id_negocio, datos_nuevo)
+                        
+                        # Crear su archivo de permisos por defecto
+                        db_permisos = cargar_permisos()
+                        db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
+                        guardar_permisos(db_permisos)
+                        
+                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                        st.rerun()
 
 # Inicialización de estado de sesión para el menú
 if "menu_seleccionado" not in st.session_state:
@@ -359,7 +394,7 @@ lista_modulos_permitidos = [
 if not lista_modulos_permitidos:
     lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
 
-# SELECTOR ÚNICO DE MÓDULOS (Evita la duplicación y el error de IDs)
+# SELECTOR ÚNICO DE MÓDULOS
 menu = st.sidebar.selectbox(
     "🧭 Selecciona un Módulo:",
     lista_modulos_permitidos,
@@ -1690,7 +1725,7 @@ PAGO: {forma_pago.upper()}
             with st.form("form_agregar_item"):
                 col_cant, col_precio_input = st.columns(2)
                 with col_cant:
-                    cantidad_vendida = st.number_input("Cantidad", min_value=0.01, step=0.1, value=1.0, format="%.2f")
+                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=0.1, value=1.0, format="%.2f")
                 with col_precio_input:
                     precio_venta = st.number_input("Precio Unitario ($)", min_value=0.0, step=1.0, value=float(st.session_state.precio_actual_input))
 

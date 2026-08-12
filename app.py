@@ -28,7 +28,89 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilo visual limpio y centrado
+# Inicializar el estado de sesión para el administrador
+if "es_admin" not in st.session_state:
+    st.session_state["es_admin"] = False
+
+# --- PANEL DE DESARROLLADOR EN LA BARRA LATERAL ---
+with st.sidebar:
+    st.markdown("### 🛠️ Control Maestro")
+  
+    # Si ya inició sesión como admin, mostrar opciones y botón de salida
+    if st.session_state["es_admin"]:
+        st.success("✅ Modo Desarrollador Activo")
+        if st.button("🔒 Cerrar Sesión de Administrador"):
+            st.session_state["es_admin"] = False
+            st.rerun()
+           
+        st.divider()
+        st.markdown("#### ➕ Registrar Nuevo Cliente")
+      
+        with st.form("form_crear_cliente"):
+            id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+            nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+            password_cliente = st.text_input("Contraseña para el Cliente", type="password")
+            fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+          
+            st.markdown("*Habilitar Módulos:*")
+            m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
+            m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
+            m_inv = st.checkbox("📦 Inventario y Productos", value=True)
+            m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
+            m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
+            m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
+            m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
+            m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
+            m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
+            m_conf = st.checkbox("⚙️ Configuración General", value=True)
+            m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
+            m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
+          
+            guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
+          
+            if guardar:
+                if not id_negocio or not nombre_comercial:
+                    st.warning("⚠️ Debes completar el ID y el Nombre.")
+                else:
+                    datos_nuevo = {
+                        "nombre": nombre_comercial,
+                        "password": password_cliente,
+                        "fecha_expiracion": str(fecha_exp),
+                        "activo": True,
+                        "modulos": {
+                            "home": m_home,
+                            "dashboard": m_dash,
+                            "inventario": m_inv,
+                            "pos": m_pos,
+                            "compras": m_comp,
+                            "mermas": m_mermas,
+                            "informes": m_inf,
+                            "control_inventario": m_ctrl,
+                            "finanzas": m_fin,            
+                            "configuracion": m_conf,
+                            "cuadratura": m_cuad,
+                            "cobrar": m_cxp
+                        }
+                    }
+                  
+                    # guardar_nuevo_cliente(id_negocio, datos_nuevo)
+                    st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                    st.rerun()
+    else:
+        # Interruptor protegido para activar el modo desarrollador
+        modo_dev = st.toggle("Activar Modo Desarrollador")
+      
+        if modo_dev:
+            clave_dev = st.text_input("Contraseña de Desarrollador", type="password")
+          
+            if clave_dev == "SIMON1908":
+                st.session_state["es_admin"] = True
+                st.rerun()
+            else:
+                if clave_dev:
+                    st.error("❌ Contraseña incorrecta")
+
+# Estilo visual compacto y sin scroll
 st.markdown("""
     <style>
     .main-title {
@@ -47,162 +129,52 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicializar estados de sesión unificados
-if "es_admin" not in st.session_state:
-    st.session_state["es_admin"] = False
-if "cliente_logueado" not in st.session_state:
-    st.session_state["cliente_logueado"] = None
-if "negocio_seleccionado" not in st.session_state:
-    st.session_state["negocio_seleccionado"] = None
-
-# --- 🔌 CONEXIÓN PREVIA A SUPABASE PARA VALIDACIONES ---
-try:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    supabase: Client = create_client(url, key)
-    resultado = supabase.table("empresas").select("*").execute()
-    empresas_data = resultado.data if resultado.data else []
-except Exception as e:
-    empresas_data = []
-
-# --- 1. SI UN CLIENTE YA INICIÓ SESIÓN CORRECTAMENTE ---
-if st.session_state["cliente_logueado"]:
-    negocio_actual = st.session_state["cliente_logueado"]
-    ruta_negocio_cliente = os.path.join(CLIENTES_DIR, negocio_actual)
-    os.makedirs(ruta_negocio_cliente, exist_ok=True)
-    
-    st.sidebar.markdown(f"👤 **Cliente Conectado:** {negocio_actual}")
-    if st.sidebar.button("🚪 Cerrar Sesión Cliente"):
-        st.session_state["cliente_logueado"] = None
-        st.session_state["negocio_seleccionado"] = None
-        st.rerun()
-        
-    # --- AQUÍ CARGA EL HOME Y EL ENTORNO DE TRABAJO DEL CLIENTE ---
-    st.markdown(f"<div class='main-title'>🏠 Bienvenido a tu ERP - {negocio_actual}</div>", unsafe_allow_html=True)
-    st.divider()
-    
-    # Menú rápido o indicador de que el entorno está activo
-    st.success("✅ Conexión establecida correctamente con tu espacio de trabajo.")
-    
-    # Puedes poner aquí las llamadas a los módulos de tu ERP pasando `ruta_negocio_cliente`:
-    # Ejemplo: mostrar_modulo_cuentas_por_cobrar(ruta_negocio_cliente)
-    
-    st.stop() # Evita que se muestren las pantallas de login al estar conectado
-
-# --- 2. SI ERES TÚ (ADMINISTRADOR) CON TU SESIÓN ACTIVA ---
+# --- PANTALLA PRINCIPAL CONDICIONAL ---
 if st.session_state["es_admin"]:
-    with st.sidebar:
-        st.markdown("### 🛠️ Control Maestro")
-        if st.button("🔒 Cerrar Sesión Admin"):
-            st.session_state["es_admin"] = False
-            st.rerun()
-           
-        st.divider()
-        st.markdown("#### ➕ Registrar Nuevo Cliente")
+    st.markdown("### 📊 Panel de Control Maestro (Vista Administrador)")
+    # Aquí puedes mantener la visualización de la tabla de licencias
+else:
+    # Pantalla exclusiva para los clientes
+    st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
+   
+    with st.form("form_login_cliente"):
+        rut_cliente = st.text_input("Usuario / RUT:")
+        pass_cliente = st.text_input("Contraseña:", type="password")
+        submit_login = st.form_submit_button("🚀 Entrar al Sistema")
        
-        with st.form("form_crear_cliente"):
-            id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-            nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-            password_cliente = st.text_input("Contraseña para el Cliente", type="password")
-            fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
-           
-            m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
-            m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
-            m_inv = st.checkbox("📦 Inventario y Productos", value=True)
-            m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
-            m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
-            m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
-            m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
-            m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
-            m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
-            m_conf = st.checkbox("⚙️ Configuración General", value=True)
-            m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
-            m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
-           
-            guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
-            if guardar:
-                if not id_negocio or not nombre_comercial:
-                    st.warning("⚠️ Debes completar el ID y el Nombre.")
-                else:
-                    st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
-                    st.rerun()
+        if submit_login:
+            # Lógica para validar credenciales del cliente
+            pass
 
-    st.markdown("### 📊 Panel de Control Maestro (Lista de Empresas en Supabase)")
-    st.dataframe(empresas_data, use_container_width=True)
-    st.stop()
-
-# --- 3. PESTAÑAS DE ACCESO (CLIENTES VS ADMIN) ---
-st.markdown("<div class='main-title'>ControlPRO ERP - Portal de Acceso</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>Selecciona tu tipo de acceso al sistema</div>", unsafe_allow_html=True)
-
-tab_cliente, tab_admin = st.tabs(["👥 Acceso Clientes", "🛠️ Acceso Desarrollador (Admin)"])
-
-# PESTAÑA CLIENTES: Validación directa contra Supabase y creación automática de su carpeta
-with tab_cliente:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("form_login_cliente_directo"):
-            st.markdown("#### Iniciar Sesión en tu Negocio")
-            rut_cli = st.text_input("👤 Usuario / RUT de tu Negocio:")
-            pass_cli = st.text_input("🔑 Contraseña:", type="password")
-            entrar_cli = st.form_submit_button("🚀 Entrar a mi ERP", use_container_width=True)
-            
-            if entrar_cli:
-                rut_limpio = rut_cli.strip()
-                if not rut_limpio or not pass_cli.strip():
-                    st.error("❌ Debes completar todos los campos.")
-                else:
-                    # Buscamos el RUT en la tabla empresas de Supabase
-                    empresa_encontrada = next((emp for emp in empresas_data if emp.get("rut_empresa") == rut_limpio), None)
-                    
-                    if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
-                        # Creamos su carpeta local de forma automática si no existe
-                        os.path.join(CLIENTES_DIR, rut_limpio)
-                        os.makedirs(os.path.join(CLIENTES_DIR, rut_limpio), exist_ok=True)
-                        
-                        st.session_state["cliente_logueado"] = rut_limpio
-                        st.session_state["negocio_seleccionado"] = rut_limpio
-                        st.success(f"✅ ¡Bienvenido! Ingresando al sistema...")
-                        st.rerun()
-                    else:
-                        st.error("❌ RUT no registrado o licencia inactiva.")
-
-# PESTAÑA ADMIN: Exclusiva para ti con credenciales maestras
-with tab_admin:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("form_login_admin_maestro"):
-            st.markdown("#### Panel de Control Maestro")
-            user_adm = st.text_input("Usuario Administrador:")
-            pass_adm = st.text_input("Contraseña Maestra:", type="password")
-            entrar_adm = st.form_submit_button("🔐 Acceder como Desarrollador", use_container_width=True)
-            
-            if entrar_adm:
-                if user_adm == "admin" and pass_adm == "SIMON1908":
-                    st.session_state["es_admin"] = True
-                    st.rerun()
-                else:
-                    st.error("❌ Credenciales de desarrollador inválidas.")
-
-st.stop()
-
-# --- FUNCIONES Y MÓDULOS DEL ERP (ABAJO DEL TODO) ---
 def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf = FPDF(orientation='P', unit='mm', format='Letter')
     pdf.add_page()
   
+    # 📁 Obtener la carpeta del negocio seleccionado de forma limpia
     negocio_actual = str(st.session_state.get('negocio_seleccionado', '')).strip()
-    tenant_dir = os.path.join(CLIENTES_DIR, negocio_actual) if negocio_actual else ""
+    tenant_dir = os.path.join(CARPETA_CLIENTES, negocio_actual) if negocio_actual else ""
+  
+    # 🖨️ Depuración para verificar en la terminal de VS Code qué ruta está buscando
+    print(f"DEBUG PDF -> Negocio: '{negocio_actual}' | Ruta carpeta: '{tenant_dir}'")
 
+    # 🖼️ Cargar logo si existe en la carpeta del negocio
     if tenant_dir:
         ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
+        # Solución para Windows: reemplazar '\' por '/'
         ruta_logo_fpdf = ruta_logo.replace('\\', '/')
+        
         if os.path.exists(ruta_logo):
             try:
                 pdf.image(ruta_logo_fpdf, x=10, y=8, w=25)
             except Exception as e:
                 print(f"Error al cargar el logo en el PDF: {e}")
+        else:
+            print(f"El archivo logo_empresa.png no se encontró en la ruta: {ruta_logo}")
+    else:
+        print(f"La carpeta del negocio no es válida: {tenant_dir}")
 
+    # ⚙️ Cargar configuración desde el archivo JSON del negocio
     cfg = {}
     if tenant_dir:
         ruta_config_json = os.path.join(tenant_dir, "config_ticket.json")
@@ -220,6 +192,7 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     rut_empresa = cfg.get('rut_empresa') or 'Sin RUT'
     direccion_empresa = cfg.get('direccion') or 'Sin Dirección'
    
+    # 🏢 Encabezado del documento
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 6, str(nombre_empresa), ln=True, align='C')
     pdf.set_font("Arial", '', 9)
@@ -231,6 +204,7 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(0, 8, "GUÍA DE DESPACHO ELECTRÓNICA", ln=True, align='C')
     pdf.ln(5)
    
+    # Datos del cliente
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(0, 6, "DATOS DEL CLIENTE", ln=True)
     pdf.set_font("Arial", '', 10)
@@ -238,6 +212,7 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(60, 6, f"RUT: {cliente_rut}", border=1, ln=True)
     pdf.ln(5)
    
+    # Tabla de productos
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(85, 8, "Descripción", border=1, align='C')
     pdf.cell(20, 8, "Cant.", border=1, align='C')
@@ -263,6 +238,510 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(35, 8, f"${total_general:,.0f}", border=1, align='R', ln=True)
    
     return pdf.output(dest='S')
+
+# 🔌 Conexión a Supabase usando st.secrets
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["key"]
+supabase: Client = create_client(url, key)
+
+# 📊 Consultar los datos de la tabla empresas
+resultado = supabase.table("empresas").select("*").execute()
+empresas_data = resultado.data
+# 🖥️ Mostrar los datos en la aplicación
+st.dataframe(empresas_data)
+
+# Define la ruta para el archivo maestro de proveedores
+PROVEEDORES_FILE = os.path.join("clientes", "maestro_proveedores.xlsx") # O en la ruta de tu negocio
+
+def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
+    if st.button("⬅️ Volver al Home", use_container_width=True):
+        st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
+        st.rerun()
+    st.markdown("### 📑 Gestión de Cuentas por Cobrar")
+    archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
+  
+    if not os.path.exists(archivo_cxp):
+        st.info("ℹ️ No hay registros de cuentas por cobrar todavía.")
+        return
+
+    df_cxp = pd.read_excel(archivo_cxp)
+  
+    cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
+  
+    df_filtrado = df_cxp.copy()
+    if cliente_filtro:
+        df_filtrado = df_filtrado[df_filtrado["Cliente"].str.contains(cliente_filtro, case=False, na=False)]
+  
+    st.dataframe(df_filtrado, use_container_width=True)
+    st.write(f"Total pendiente: **${df_filtrado['SaldoPendiente'].sum():,.2f}**")
+  
+    st.divider()
+    st.markdown("### 💳 Registrar Abono")
+    clientes_deuda = df_cxp[df_cxp["SaldoPendiente"] > 0]["Cliente"].unique().tolist()
+   
+    if clientes_deuda:
+        cliente_seleccionado = st.selectbox("Selecciona el cliente para abonar:", options=clientes_deuda)
+        monto_abono = st.number_input("💵 Monto a abonar ($):", min_value=0.0, step=100.0)
+       
+        if st.button("✅ Registrar Abono", use_container_width=True):
+            if monto_abono > 0:
+                # Filtramos el registro del cliente seleccionado
+                idx = df_cxp[df_cxp["Cliente"] == cliente_seleccionado].index[0]
+                saldo_actual = df_cxp.loc[idx, "SaldoPendiente"]
+              
+                if monto_abono >= saldo_actual:
+                    # Si el abono cubre o supera la deuda, eliminamos el registro
+                    df_cxp = df_cxp.drop(idx)
+                    st.success(f"🎉 Deuda saldada por completo para {cliente_seleccionado}.")
+                else:
+                    # Si es un abono parcial, restamos al saldo pendiente
+                    df_cxp.loc[idx, "SaldoPendiente"] -= monto_abono
+                    df_cxp.loc[idx, "Abono"] += monto_abono
+                    st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
+              
+                # Guardamos los cambios en el archivo Excel
+                df_cxp.to_excel(archivo_cxp, index=False)
+                st.rerun()
+            else:
+                st.warning("⚠️ Ingresa un monto mayor a cero.")
+    else:
+        st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
+
+def cargar_maestro_proveedores(ruta_negocio):
+    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
+    if not os.path.exists(archivo_prov):
+        df_ini = pd.DataFrame(columns=['Nombre_Proveedor', 'Rut', 'Contacto', 'Telefono', 'Email'])
+        df_ini.to_excel(archivo_prov, index=False)
+    return pd.read_excel(archivo_prov)
+
+def guardar_nuevo_proveedor(ruta_negocio, nombre, rut="", contacto="", telefono="", email=""):
+    archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
+    df_prov = cargar_maestro_proveedores(ruta_negocio)
+    
+    # Evitar duplicados exactos por nombre
+    nombre_limpio = str(nombre).strip().upper()
+    if not df_prov.empty and nombre_limpio in df_prov['Nombre_Proveedor'].str.upper().values:
+        return # Ya existe
+        
+    nuevo = pd.DataFrame([{
+        'Nombre_Proveedor': nombre.strip(),
+        'Rut': rut,
+        'Contacto': contacto,
+        'Telefono': telefono,
+        'Email': email
+    }])
+    
+    df_actualizado = pd.concat([df_prov, nuevo], ignore_index=True)
+    df_actualizado.to_excel(archivo_prov, index=False)
+
+def mostrar_maestro_proveedores(ruta_negocio):
+    st.markdown("### 📇 Directorio de Proveedores Registrados")
+    df_proveedores = cargar_maestro_proveedores(ruta_negocio)
+    
+    if df_proveedores.empty:
+        st.info("ℹ️ No hay proveedores registrados todavía.")
+    else:
+        st.dataframe(df_proveedores, use_container_width=True)
+# --- MÓDULOS INTEGRADOS DIRECTAMENTE EN APP.PY ---
+
+def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
+    st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
+    st.markdown("Administra y registra las facturas pendientes de tus proveedores. Cambia el estado a 'Pagado' cuando saldes la deuda.")
+
+    archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
+
+    if not os.path.exists(archivo_cuentas):
+        df_ini = pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado'])
+        df_ini.to_excel(archivo_cuentas, index=False)
+
+    df_cuentas = pd.read_excel(archivo_cuentas)
+
+    with st.expander("➕ Registrar Nueva Factura de Proveedor Manualmente"):
+        with st.form("form_nueva_cuenta_manual"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                prov_m = st.text_input("Nombre del Proveedor")
+                num_fac_m = st.text_input("Número de Factura")
+                monto_m = st.number_input("Monto Total ($)", min_value=0.0, step=100.0, value=0.0)
+            with col_c2:
+                f_emision = st.date_input("Fecha de Emisión", value=date.today())
+                f_venc = st.date_input("Fecha de Vencimiento", value=date.today())
+           
+            btn_guardar_cuenta = st.form_submit_button("💾 Guardar Factura Pendiente")
+            if btn_guardar_cuenta:
+                if not prov_m or not num_fac_m or monto_m <= 0:
+                    st.warning("⚠️ Completa todos los campos obligatorios y un monto mayor a 0.")
+                else:
+                    nueva_fila = pd.DataFrame([{
+                        'Proveedor': prov_m,
+                        'Numero_Factura': num_fac_m,
+                        'Fecha_Emision': str(f_emision),
+                        'Fecha_Vencimiento': str(f_venc),
+                        'Monto_Total': monto_m,
+                        'Estado': 'PENDIENTE'
+                    }])
+                    df_actualizado = pd.concat([df_cuentas, nueva_fila], ignore_index=True)
+                    df_actualizado.to_excel(archivo_cuentas, index=False)
+                    st.success("✅ ¡Factura registrada correctamente!")
+                    st.rerun()
+
+    st.divider()
+    df_cuentas = pd.read_excel(archivo_cuentas)
+
+    if df_cuentas.empty:
+        st.info("ℹ️ No hay cuentas por pagar registradas.")
+    else:
+        df_pendientes = df_cuentas[df_cuentas['Estado'].astype(str).str.upper() == 'PENDIENTE']
+        deuda_total_pendiente = df_pendientes['Monto_Total'].sum() if not df_pendientes.empty else 0.0
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.metric(label="🔥 Deuda Total Pendiente", value=f"${deuda_total_pendiente:,.2f}")
+        with col_m2:
+            st.metric(label="📄 Total Documentos Registrados", value=len(df_cuentas))
+
+        st.divider()
+        st.markdown("#### 📂 Listado General de Cuentas")
+
+        for idx, row in df_cuentas.iterrows():
+            estado_actual = str(row.get('Estado', 'PENDIENTE')).upper()
+            es_pendiente = estado_actual == 'PENDIENTE'
+
+            c_info, c_action = st.columns([8, 2])
+            with c_info:
+                st.info(f"🏢 **{row.get('Proveedor', '')}** | Fac: **{row.get('Numero_Factura', '')}** | Emisión: {row.get('Fecha_Emision', '')} | Vence: **{row.get('Fecha_Vencimiento', '')}** | Monto: **${float(row.get('Monto_Total', 0)):,.2f}** | Estado: **{estado_actual}**")
+           
+            with c_action:
+                if es_pendiente:
+                    if st.button("✅ Marcar Pagado", key=f"pagar_cta_{idx}", type="primary"):
+                        df_cuentas.at[idx, 'Estado'] = 'PAGADO'
+                        df_cuentas.to_excel(archivo_cuentas, index=False)
+                        st.success(f"🎉 ¡Factura marcada como Pagada!")
+                        st.rerun()
+                else:
+                    st.success("✔ Pagado")
+
+def mostrar_modulo_cuadratura_diaria(ruta_negocio):
+    st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
+    archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
+
+    if not os.path.exists(archivo_cuadratura):
+        df_ini = pd.DataFrame(columns=[
+            'Fecha', 'Efectivo', 'Transferencia', 'Debito',
+            'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones'
+        ])
+        df_ini.to_excel(archivo_cuadratura, index=False)
+
+    df_cuadratura = pd.read_excel(archivo_cuadratura)
+
+    with st.form("form_cuadratura_diaria", clear_on_submit=True):
+        st.markdown("#### 📥 Ingresar Cierre / Cuadratura del Día")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            fecha_caja = st.date_input("Fecha del Cuadre", value=date.today())
+            efectivo_dia = st.number_input("💵 Efectivo en Caja ($)", min_value=0.0, step=100.0, value=0.0)
+            transferencia_dia = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
+            debito_dia = st.number_input("💳 Débito / Redcompra ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_c2:
+            cigarros_dia = st.number_input("🚬 Venta de Cigarros ($)", min_value=0.0, step=100.0, value=0.0)
+            otros_ingresos = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
+            observaciones = st.text_input("📝 Observaciones")
+
+        total_calculado_dia = efectivo_dia + transferencia_dia + debito_dia + cigarros_dia + otros_ingresos
+        st.info(f"💰 **Total Caja Calculada:** ${total_calculado_dia:,.2f}")
+
+        if st.form_submit_button("💾 Guardar Cuadratura"):
+            nuevo = pd.DataFrame([{
+                'Fecha': str(fecha_caja), 'Efectivo': efectivo_dia,
+                'Transferencia': transferencia_dia, 'Debito': debito_dia,
+                'Cigarros': cigarros_dia, 'Otros_Ingresos': otros_ingresos,
+                'Total_Dia': total_calculado_dia, 'Observaciones': observaciones or "Sin observaciones"
+            }])
+            pd.concat([df_cuadratura, nuevo], ignore_index=True).to_excel(archivo_cuadratura, index=False)
+            st.success("✅ ¡Cuadratura guardada con éxito!")
+            st.rerun()
+            
+def mostrar_modulo_registro_gastos(ruta_negocio):
+    st.markdown("### 📋 Registro y Control de Gastos")
+    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
+
+    if not os.path.exists(archivo_gastos):
+        df_ini = pd.DataFrame(columns=['Fecha_Hora', 'Descripcion_Gasto', 'Categoria', 'Metodo_Pago', 'Documento', 'Monto'])
+        df_ini.to_excel(archivo_gastos, index=False)
+
+    df_gastos = pd.read_excel(archivo_gastos)
+
+    with st.form("form_nuevo_gasto_manual"):
+        st.markdown("#### ➕ Registrar Gasto Manual")
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            desc_gasto = st.text_input("Descripción del Gasto", value="")
+            cat_gasto = st.selectbox("Categoría", ["Mercadería", "Servicios Básicos", "Arriendo", "Remuneraciones", "Varios", "Otros"])
+        with col_g2:
+            metodo_pago = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Crédito", "Cheque"])
+            monto_gasto = st.number_input("Monto Total del Gasto ($)", min_value=0.0, step=100.0, value=0.0)
+           
+        doc_gasto = st.text_input("Documento Asociado (ej. Factura 123, Boleta)", value="Sin Documento")
+        submitted_gasto = st.form_submit_button("Guardar Gasto")
+
+        if submitted_gasto:
+            if not desc_gasto or monto_gasto <= 0:
+                st.warning("⚠️ Ingresa una descripción y un monto mayor a 0.")
+            else:
+                nuevo_registro = pd.DataFrame([{
+                    'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'Descripcion_Gasto': desc_gasto,
+                    'Categoria': cat_gasto,
+                    'Metodo_Pago': metodo_pago,
+                    'Documento': doc_gasto,
+                    'Monto': monto_gasto
+                }])
+                df_actualizado = pd.concat([df_gastos, nuevo_registro], ignore_index=True)
+                df_actualizado.to_excel(archivo_gastos, index=False)
+                st.success("✅ ¡Gasto registrado con éxito!")
+                st.rerun()
+
+    st.divider()
+    df_gastos = pd.read_excel(archivo_gastos)
+
+    if df_gastos.empty:
+        st.info("ℹ️ No hay gastos registrados todavía en este negocio.")
+    else:
+        total_egresos = df_gastos['Monto'].sum() if 'Monto' in df_gastos.columns else 0.0
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.metric(label="💰 Total Egresos Acumulados", value=f"${total_egresos:,.2f}")
+        with col_m2:
+            st.metric(label="📊 Cantidad de Registros", value=len(df_gastos))
+
+        st.divider()
+        st.markdown("#### 📂 Historial de Gastos y Egresos")
+
+        # Cabeceras de la tabla con proporciones optimizadas
+        h1, h2, h3, h4, h5, h6 = st.columns([3, 2, 2, 2, 2, 1])
+        with h1: st.markdown("**Descripción**")
+        with h2: st.markdown("**Categoría**")
+        with h3: st.markdown("**Método Pago**")
+        with h4: st.markdown("**Documento**")
+        with h5: st.markdown("**Monto**")
+        with h6: st.markdown("**Acción**")
+        st.markdown("---")
+
+        for idx, row in df_gastos.iterrows():
+            f_val = str(row.get('Fecha_Hora', row.get('Fecha', 'Sin Fecha')))
+            if f_val == 'nan' or not f_val.strip(): f_val = 'Sin Fecha'
+
+            d_val = str(row.get('Descripcion_Gasto', row.get('Detalle', 'Gasto General')))
+            if d_val == 'nan' or not d_val.strip(): d_val = 'Gasto General'
+
+            c_val = str(row.get('Categoria', 'General'))
+            if c_val == 'nan': c_val = 'General'
+
+            p_val = str(row.get('Metodo_Pago', 'Efectivo'))
+            if p_val == 'nan': p_val = 'Efectivo'
+
+            doc_val = str(row.get('Documento', 'Sin Doc'))
+            if doc_val == 'nan' or not doc_val.strip(): doc_val = 'Sin Doc'
+
+            m_val = float(row.get('Monto', 0)) if pd.notna(row.get('Monto', 0)) else 0.0
+
+            # Filas alineadas exactamente debajo de cada cabecera con su botón al lado
+            c1, c2, c3, c4, c5, c6 = st.columns([3, 2, 2, 2, 2, 1])
+            with c1: st.write(d_val)
+            with c2: st.write(c_val)
+            with c3: st.write(p_val)
+            with c4: st.write(doc_val)
+            with c5: st.write(f"${m_val:,.2f}")
+            with c6:
+                if st.button("🗑️", key=f"del_gasto_fila_{idx}", help="Eliminar este registro"):
+                    df_gastos = df_gastos.drop(idx).reset_index(drop=True)
+                    df_gastos.to_excel(archivo_gastos, index=False)
+                    st.success("✅ Gasto eliminado correctamente.")
+                    st.rerun()
+
+
+# --- RUTA SEGURA PARA DESARROLLO Y .EXE ---
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CLIENTES_DIR = os.path.join(BASE_DIR, "clientes")
+PERMISOS_FILE = os.path.join(BASE_DIR, "permisos_negocios.json")
+# Configuración inicial de la página web
+st.set_page_config(
+    page_title="ControlPRO ERP - Gestión Inteligente",
+    page_icon="📦",
+    layout="wide"
+)
+
+# --- PANEL DE DESARROLLADOR EN LA BARRA LATERAL ---
+with st.sidebar:
+    st.markdown("### 🛠️ Control Maestro")
+   
+    # Interruptor protegido para activar el modo desarrollador
+    modo_dev = st.toggle("Activar Modo Desarrollador")
+   
+    if modo_dev:
+        clave_dev = st.text_input("Contraseña de Desarrollador", type="password")
+       
+        # Define aquí tu clave secreta maestra
+        if clave_dev == "SIMON1908": # Puedes cambiar esta contraseña cuando quieras
+            st.success("✅ Modo Desarrollador Activo")
+            st.divider()
+           
+            st.markdown("#### ➕ Registrar Nuevo Cliente")
+           
+            with st.form("form_crear_cliente"):
+                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+                password_cliente = st.text_input("Contraseña para el Cliente", type="password")
+                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+               
+                st.markdown("*Habilitar Módulos:*")
+                m_home = st.checkbox("🏠 Home / Bienvenida", value=True)
+                m_dash = st.checkbox("📊 Dashboard Ejecutivo", value=True)
+                m_inv = st.checkbox("📦 Inventario y Productos", value=True)
+                m_pos = st.checkbox("💰 Módulo de Ventas (POS)", value=True)
+                m_comp = st.checkbox("🛒 Registrar Compra (CPP)", value=True)
+                m_mermas = st.checkbox("📉 Mermas y Ajustes", value=True)
+                m_inf = st.checkbox("📈 Informes y Movimientos [Extra]", value=False)
+                m_ctrl = st.checkbox("⚠️ Control de Inventario [Extra]", value=False)
+                m_fin = st.checkbox("📊 Módulo de Finanzas", value=True)
+                m_conf = st.checkbox("⚙️ Configuración General", value=True)
+                m_cuad = st.checkbox("📒 Cuadratura Diaria", value=True)
+                m_cxp = st.checkbox("📑 Cuentas por Cobrar", value=True)
+               
+                guardar = st.form_submit_button("💾 Guardar y Crear Negocio")
+               
+                if guardar:
+                    if not id_negocio or not nombre_comercial:
+                        st.warning("⚠️ Debes completar el ID y el Nombre.")
+                    else:
+                        datos_nuevo = {
+                            "nombre": nombre_comercial,
+                            "password": password_cliente,
+                            "fecha_expiracion": str(fecha_exp),
+                            "activo": True,
+                            "modulos": {
+                                "home": m_home,
+                                "dashboard": m_dash,
+                                "inventario": m_inv,
+                                "pos": m_pos,
+                                "compras": m_comp,
+                                "informes": m_inf,
+                                "control_inventario": m_ctrl,
+                                "finanzas": m_fin,             
+                                "configuracion": m_conf,  # <-- Coma añadida aquí
+                                "cuadratura": m_cuad,
+                                "cobrar": m_cxp
+                            }
+                        } # <-- Llave de cierre del diccionario principal
+                       
+                        guardar_nuevo_cliente(id_negocio, datos_nuevo)
+                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                        st.rerun()
+        else:
+            if clave_dev:
+                st.error("❌ Contraseña incorrecta")
+
+
+# Estilo visual compacto y sin scroll para el Home
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 1.8rem;
+        color: #1E3A8A;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 0px;
+    }
+    .sub-title {
+        font-size: 0.95rem;
+        color: #4B5563;
+        text-align: center;
+        margin-bottom: 15px;
+    }
+    .ticket-box {
+        background-color: #1F2937;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px dashed #3B82F6;
+        color: #F3F4F6;
+        font-family: monospace;
+    }
+    .btn-link-tab {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background-color: #2563EB;
+        color: white !important;
+        text-align: center;
+        border-radius: 0.375rem;
+        text-decoration: none;
+        font-weight: 500;
+        width: 100%;
+    }
+    .btn-link-tab:hover {
+        background-color: #1D4ED8;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ----------------- GESTIÓN DE CARPETAS Y MULTINEGOCIO -----------------
+CARPETA_CLIENTES = os.path.join(BASE_DIR, "clientes")
+if not os.path.exists(CARPETA_CLIENTES):
+    os.makedirs(CARPETA_CLIENTES)
+
+negocios_disponibles = [d for d in os.listdir(CARPETA_CLIENTES) if os.path.isdir(os.path.join(CARPETA_CLIENTES, d))]
+if not negocios_disponibles:
+    negocio_default = "negocio_1"
+    os.makedirs(os.path.join(CARPETA_CLIENTES, negocio_default), exist_ok=True)
+    negocios_disponibles = [negocio_default]
+
+# ----------------- SISTEMA DE AUTENTICACIÓN INTELIGENTE -----------------
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "negocio_actual" not in st.session_state:
+    st.session_state.negocio_actual = None
+if "usuario_logueado" not in st.session_state:
+    st.session_state.usuario_logueado = None
+
+if not st.session_state.autenticado:
+    st.markdown('<p class="main-title">🔐 ControlPRO ERP - Acceso Unificado</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Ingresa tus credenciales para acceder a tu negocio</p>', unsafe_allow_html=True)
+ 
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        with st.form("form_login_automatico"):
+            usuario_input = st.text_input("👤 Usuario / RUT:")
+            password_input = st.text_input("🔑 Contraseña:", type="password")
+         
+            btn_ingresar = st.form_submit_button("🚀 Entrar al Sistema", use_container_width=True)
+         
+        if btn_ingresar:
+            usuario_limpio = usuario_input.strip()
+            password_limpio = password_input.strip()
+          
+            # 🔒 Validar que los campos no estén vacíos
+            if not usuario_limpio or not password_limpio:
+                st.error("❌ Debes ingresar tanto el usuario como la contraseña.")
+            else:
+                # 🏢 Búsqueda del RUT en Supabase
+                empresa_encontrada = next((emp for emp in empresas_data if emp["rut_empresa"] == usuario_limpio), None)
+
+                if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
+                    negocio_asignado = usuario_limpio
+                    os.makedirs(os.path.join(CARPETA_CLIENTES, negocio_asignado), exist_ok=True)
+                  
+                    st.session_state.autenticado = True
+                    st.session_state.negocio_actual = negocio_asignado
+                    st.session_state.usuario_logueado = usuario_input
+                    st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
+                    st.success(f"🏠 ¡Bienvenido! Ingresando a {negocio_asignado.upper()}...")
+                    st.rerun()
+                else:
+                    st.error("❌ RUT no registrado o licencia inactiva.")
+    st.stop()
 
 # Recuperamos los datos del negocio autenticado de forma segura
 negocio_seleccionado = st.session_state.get("negocio_actual", None)

@@ -261,48 +261,99 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     else:
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
+def mostrar_modulo_registro_gastos(ruta_negocio):
+    st.markdown("### 📋 Registro y Control de Gastos")
+    
+    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
+    if not os.path.exists(archivo_gastos):
+        pd.DataFrame(columns=['Fecha', 'Proveedor', 'Numero_Factura', 'Tipo_Pago', 'Categoria', 'Monto', 'Fecha_Hora', 'Descripcion_Gasto', 'Metodo_Pago']).to_excel(archivo_gastos, index=False)
+    
+    # --- FORMULARIO PARA REGISTRAR NUEVO GASTO ---
+    with st.form("form_nuevo_gasto"):
+        st.markdown("#### ➕ Registrar Nuevo Gasto o Egreso")
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            fecha_gasto = st.date_input("Fecha del Gasto", value=date.today())
+            proveedor_g = st.text_input("Proveedor / Establecimiento")
+            factura_g = st.text_input("Número de Factura o Boleta (Opcional)")
+            categoria_g = st.selectbox("Categoría", ["Mercadería", "Gastos Operativos", "Servicios Básicos", "Logística", "Otros"])
+        with col_g2:
+            monto_g = st.number_input("Monto Total ($)", min_value=0.0, step=100.0, value=0.0)
+            tipo_pago_g = st.selectbox("Método de Pago", ["Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito", "Transferencia", "Cheque"])
+            descripcion_g = st.text_input("Descripción / Detalle (ej: Paltas, Tablillas)")
+            
+        btn_guardar_gasto = st.form_submit_button("💾 Guardar Gasto", type="primary")
+        
+        if btn_guardar_gasto:
+            if monto_g <= 0:
+                st.warning("⚠️ Debes ingresar un monto mayor a cero.")
+            else:
+                df_gastos_ant = pd.read_excel(archivo_gastos)
+                nuevo_gasto = pd.DataFrame([{
+                    'Fecha': str(fecha_gasto),
+                    'Proveedor': proveedor_g or "Sin Proveedor",
+                    'Numero_Factura': factura_g or "S/N",
+                    'Tipo_Pago': tipo_pago_g,
+                    'Categoria': categoria_g,
+                    'Monto': monto_g,
+                    'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'Descripcion_Gasto': descripcion_g,
+                    'Metodo_Pago': tipo_pago_g
+                }])
+                pd.concat([df_gastos_ant, nuevo_gasto], ignore_index=True).to_excel(archivo_gastos, index=False)
+                st.success("✅ ¡Gasto registrado con éxito!")
+                st.rerun()
+
+    st.divider()
+    st.markdown("### 📂 Historial de Gastos Registrados")
+    
+    # Cargar y mostrar la tabla actualizada
+    df_gastos = pd.read_excel(archivo_gastos)
+    if not df_gastos.empty:
+        st.dataframe(df_gastos, use_container_width=True)
+        total_gastos = df_gastos['Monto'].sum() if 'Monto' in df_gastos.columns else 0.0
+        st.metric(label="💰 Total Histórico de Gastos", value=f"${total_gastos:,.2f}")
+    else:
+        st.info("ℹ️ No hay registros de gastos todavía.")
+
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
     archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
-    
+   
     if not os.path.exists(archivo_cuentas):
         pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado']).to_excel(archivo_cuentas, index=False)
-    
+   
     df_cuentas = pd.read_excel(archivo_cuentas)
-    
-    # 🧹 Limpiar formato de fecha para quitar el '00:00:00'
+   
+    # Limpiar formato de fecha para quitar el '00:00:00'
     for col_f in ['Fecha_Emision', 'Fecha_Vencimiento']:
         if col_f in df_cuentas.columns:
             df_cuentas[col_f] = pd.to_datetime(df_cuentas[col_f], errors='coerce').dt.date
-    
-    # Mostrar la tabla actual con las fechas limpias
+   
     st.dataframe(df_cuentas, use_container_width=True)
-    
+   
     st.divider()
     st.markdown("### ⚙️ Actualizar Estado de Documento")
-    
+   
     if not df_cuentas.empty:
         opciones_facturas = []
         for idx, row in df_cuentas.iterrows():
             opciones_facturas.append(f"Fila {idx} - Prov: {row.get('Proveedor')} | Factura #{row.get('Numero_Factura')} | Estado: {row.get('Estado')}")
-        
+       
         with st.form("form_actualizar_estado_cxp"):
             factura_seleccionada = st.selectbox("Selecciona la factura a modificar:", options=opciones_facturas)
             nuevo_estado = st.selectbox("Nuevo Estado:", options=["PAGADO", "PENDIENTE"])
-            
+           
             btn_actualizar_estado = st.form_submit_button("🔄 Actualizar Estado de Factura", type="primary")
-            
+           
             if btn_actualizar_estado and factura_seleccionada:
                 idx_fila = int(factura_seleccionada.split(" - ")[0].replace("Fila ", ""))
                 df_cuentas.loc[idx_fila, "Estado"] = nuevo_estado
-                
-                # Volvemos a guardar (si el Excel guarda datetime, al recargar se formateará visualmente de nuevo)
                 df_cuentas.to_excel(archivo_cuentas, index=False)
                 st.success(f"✅ ¡El estado de la factura se ha actualizado a **{nuevo_estado}** con éxito!")
                 st.rerun()
     else:
-        st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")
-
+        st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")        
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")

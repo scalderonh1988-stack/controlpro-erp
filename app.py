@@ -2015,7 +2015,7 @@ PRODUCTO INGRESADO:
 # ----------------- SECCIÓN CONFIGURACIÓN GENERAL -----------------
 elif menu == "⚙️ Configuración General":
     mostrar_encabezado_con_home("⚙️ Panel de Configuración General del Sistema")
-   
+  
     # 📁 Definición de rutas y directorios específicos del negocio actual
     tenant_dir = os.path.join(CARPETA_CLIENTES, negocio_seleccionado)
     os.makedirs(tenant_dir, exist_ok=True)
@@ -2044,9 +2044,9 @@ elif menu == "⚙️ Configuración General":
                 with open(ruta_config_json, "r", encoding="utf-8") as f:
                     st.session_state.config_ticket = json.load(f)
             except Exception:
-                st.session_state.config_ticket = {"nombre_empresa": negocio_seleccionado, "rut_empresa": "", "direccion": "", "pie_pagina": "", "formato_impresion": "80mm (Térmica Estándar)"}
+                st.session_state.config_ticket = {"nombre_empresa": negocio_seleccionado, "rut_empresa": "", "direccion": "", "iva_tasa": 19.0, "pie_pagina": "", "formato_impresion": "80mm (Térmica Estándar)"}
         else:
-            st.session_state.config_ticket = {"nombre_empresa": negocio_seleccionado, "rut_empresa": "", "direccion": "", "pie_pagina": "", "formato_impresion": "80mm (Térmica Estándar)"}
+            st.session_state.config_ticket = {"nombre_empresa": negocio_seleccionado, "rut_empresa": "", "direccion": "", "iva_tasa": 19.0, "pie_pagina": "", "formato_impresion": "80mm (Térmica Estándar)"}
 
     tab1, tab2, tab3 = st.tabs(["👥 Usuarios y Cajas", "💳 Formas de Pago", "🖨️ Formato de Tickets e Impresión"])
 
@@ -2112,27 +2112,32 @@ elif menu == "⚙️ Configuración General":
             empresa = st.text_input("Nombre Empresa", value=st.session_state.config_ticket.get("nombre_empresa", ""))
             rut = st.text_input("RUT", value=st.session_state.config_ticket.get("rut_empresa", ""))
             direccion = st.text_input("Dirección", value=st.session_state.config_ticket.get("direccion", ""))
-            pie = st.text_input("Pie de Página", value=st.session_state.config_ticket.get("pie_pagina", ""))
            
+            # 📌 Tasa de IVA personalizable (Ej: 22% para Uruguay o 19% por defecto)
+            iva_personalizado = st.number_input("Tasa de IVA Local (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.config_ticket.get("iva_tasa", 19.0)), step=1.0)
+           
+            pie = st.text_input("Pie de Página", value=st.session_state.config_ticket.get("pie_pagina", ""))
+          
             formatos_disponibles = ["80mm (Térmica Estándar)", "58mm (Térmica Pequeña)", "Carta / A4"]
             formato_actual = st.session_state.config_ticket.get("formato_impresion", "80mm (Térmica Estándar)")
             idx_formato = formatos_disponibles.index(formato_actual) if formato_actual in formatos_disponibles else 0
-           
+          
             formato = st.selectbox("Formato", formatos_disponibles, index=idx_formato)
-            btn_guardar_config = st.form_submit_button("💾 Guardar")
-           
+            btn_guardar_config = st.form_submit_button("💾 Guardar Configuración")
+          
             if btn_guardar_config:
                 st.session_state.config_ticket = {
                     "nombre_empresa": empresa,
                     "rut_empresa": rut,
                     "direccion": direccion,
+                    "iva_tasa": iva_personalizado,
                     "pie_pagina": pie,
                     "formato_impresion": formato
                 }
                 try:
                     with open(ruta_config_json, "w", encoding="utf-8") as f:
                         json.dump(st.session_state.config_ticket, f, ensure_ascii=False, indent=4)
-                    st.success("✅ Configuración guardada permanentemente.")
+                    st.success("✅ Configuración e IVA guardados permanentemente.")
                 except Exception as e:
                     st.error(f"❌ Error al guardar el archivo: {e}")
 
@@ -2140,7 +2145,7 @@ elif menu == "⚙️ Configuración General":
         st.markdown("### 🖼️ Logotipo de la Empresa")
         if os.path.exists(ruta_logo):
             st.image(ruta_logo, width=120, caption="Logotipo actual guardado")
-    
+   
         logo_cargado = st.file_uploader("Sube una imagen para tu logo (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_logo_empresa")
         if logo_cargado is not None:
             os.makedirs(tenant_dir, exist_ok=True)
@@ -2190,9 +2195,9 @@ elif menu == "⚙️ Configuración General":
 
     elif accion == "Importar base de datos":
         st.warning("⚠️ *Atención:* Al importar una nueva base de datos, se sobrescribirán los datos actuales de tu negocio.")
-       
+      
         archivo_cargado = st.file_uploader("Selecciona tu archivo Excel desde tu equipo", type=["xlsx"], key="uploader_importar_bd")
-       
+      
         if archivo_cargado is not None:
             if st.button("🚀 Confirmar y Reemplazar Base de Datos"):
                 try:

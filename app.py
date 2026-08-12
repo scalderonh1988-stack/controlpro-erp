@@ -510,6 +510,7 @@ if not st.session_state.autenticado:
                     st.session_state.usuario_logueado = "Administrador Master"
                     st.session_state.negocio_actual = "admin_general"
                     st.session_state.nombre_empresa = "ControlPRO Master"
+                    st.session_state.rol_usuario = "Administrador"
                     st.success("🛠️ ¡Bienvenido Maestro! Accediendo al entorno completo...")
                     st.rerun()
                 else:
@@ -524,6 +525,7 @@ if not st.session_state.autenticado:
                         st.session_state.negocio_actual = negocio_asignado
                         st.session_state.usuario_logueado = usuario_input
                         st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
+                        st.session_state.rol_usuario = "Administrador"  # Perfil por defecto para clientes autenticados
                         st.success(f"🏠 ¡Bienvenido! Ingresando al Home de {str(st.session_state.nombre_empresa).upper()}...")
                         st.rerun()
                     else:
@@ -586,6 +588,35 @@ modulos_totales = [
     "⚙️ Configuración General"
 ]
 
+# --- LÓGICA DE PERFILES Y ROLES GRANULARES ---
+ROLES_PERMISOS = {
+    "Administrador": modulos_totales,
+    "Cajero / Vendedor": [
+        "🏠 Home / Bienvenida",
+        "💰 Módulo de Ventas (POS)",
+        "📒 Cuadratura Diaria"
+    ],
+    "Bodeguero": [
+        "🏠 Home / Bienvenida",
+        "📦 Inventario y Productos",
+        "🛒 Registrar Compra (CPP)",
+        "⚠️ Control y Gestión de Inventario",
+        "📉 Mermas y Ajustes"
+    ]
+}
+
+def obtener_modulos_permitidos(negocio_id, rol_usuario, es_dev):
+    """Filtra los módulos totales basándose en el rol del usuario y la licencia del negocio."""
+    if es_dev:
+        return modulos_totales
+    
+    db_permisos = cargar_permisos()
+    modulos_licencia_negocio = db_permisos.get(negocio_id, {mod: True for mod in modulos_totales})
+    modulos_del_rol = ROLES_PERMISOS.get(rol_usuario, modulos_totales)
+    
+    modulos_finales = [m for m in modulos_totales if modulos_licencia_negocio.get(m, True) and m in modulos_del_rol]
+    return modulos_finales
+
 if st.session_state.es_admin_dev:
     with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
         st.success("✔️ Modo Desarrollador Activo")
@@ -638,6 +669,16 @@ if st.session_state.es_admin_dev:
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                         st.rerun()
 
+# 📌 Selector opcional de rol para pruebas rápidas en la barra lateral
+st.sidebar.divider()
+rol_seleccionado_sidebar = st.sidebar.selectbox(
+    "👤 Perfil / Rol Activo:",
+    options=list(ROLES_PERMISOS.keys()),
+    index=0,
+    key="selector_rol_activo"
+)
+st.session_state.rol_usuario = rol_seleccionado_sidebar
+
 # 📌 Créditos al desarrollador en el footer de la barra lateral
 st.sidebar.markdown("---")
 st.sidebar.markdown("© 2026 ControlPRO ERP")
@@ -669,12 +710,9 @@ if "formas_pago_erp" not in st.session_state:
         "Cuenta Corriente / Crédito Directo"
     ]
 
-db_permisos_actual = cargar_permisos()
-permisos_del_negocio = db_permisos_actual.get(negocio_seleccionado, {}) if not st.session_state.es_admin_dev else {mod: True for mod in modulos_totales}
-
-lista_modulos_permitidos = [
-    mod for mod in modulos_totales if permisos_del_negocio.get(mod, True)
-]
+# Obtener módulos permitidos combinando licencias y perfiles
+rol_actual = st.session_state.get('rol_usuario', 'Administrador')
+lista_modulos_permitidos = obtener_modulos_permitidos(negocio_seleccionado, rol_actual, st.session_state.es_admin_dev)
 
 if not lista_modulos_permitidos:
     lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
@@ -714,7 +752,6 @@ def mostrar_encabezado_con_home(titulo_modulo):
         if st.button("🏠 Volver al Home", use_container_width=True):
             st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
             st.rerun()
-
 
 # --- 8. RENDERIZADO DEL HOME FIJO Y MÓDULOS ---
 if menu == "🏠 Home / Bienvenida":
@@ -852,6 +889,8 @@ elif menu == "📦 Inventario y Productos":
                     guardar_nuevo_proveedor(ruta_negocio, pr_nom, pr_rut, pr_cont, pr_tel, pr_mail)
                     st.success("✅ ¡Proveedor guardado con éxito!")
                     st.rerun()
+
+                    
 
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero")

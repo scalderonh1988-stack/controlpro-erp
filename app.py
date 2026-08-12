@@ -56,12 +56,28 @@ if "cliente_logueado" not in st.session_state:
 # --- 1. SI UN CLIENTE YA INICIÓ SESIÓN CORRECTAMENTE ---
 if st.session_state["cliente_logueado"]:
     ruta_negocio_cliente = os.path.join(CLIENTES_DIR, st.session_state["cliente_logueado"])
+    
     st.sidebar.markdown(f"👤 **Cliente Conectado:** {st.session_state['cliente_logueado']}")
     if st.sidebar.button("🚪 Cerrar Sesión Cliente"):
         st.session_state["cliente_logueado"] = None
         st.rerun()
+        
+    # --- CARGAR EL ENTORNO DEL CLIENTE ---
+    if os.path.exists(ruta_negocio_cliente):
+        # Aquí llamas a la función que dibuja el menú y módulos del ERP para este cliente específico
+        # Por ejemplo, si usas una función general para el home del negocio, colócala aquí:
+        st.success(f"Bienvenido al sistema de {st.session_state['cliente_logueado']}")
+        
+        # Ejemplo de llamada a tus módulos (ajusta según cómo estructures el menú de tu ERP):
+        # mostrar_menu_principal_cliente(ruta_negocio_cliente)
+        
+    else:
+        st.error(f"⚠️ La carpeta para el negocio '{st.session_state['cliente_logueado']}' no existe en el servidor.")
+        if st.button("Volver al Login"):
+            st.session_state["cliente_logueado"] = None
+            st.rerun()
+            
     st.stop()
-
 # --- 2. SI ERES TÚ (ADMINISTRADOR) CON TU SESIÓN ACTIVA ---
 if st.session_state["es_admin"]:
     with st.sidebar:

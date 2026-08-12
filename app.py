@@ -51,9 +51,8 @@ st.markdown("""
 if "es_admin" not in st.session_state:
     st.session_state["es_admin"] = False
 
-# --- BLOQUE DE SEGURIDAD Y ACCESO UNIFICADO ---
+# --- 👥 VISTA EXCLUSIVA PARA CLIENTES (ACCESO UNIFICADO) ---
 if not st.session_state["es_admin"]:
-    # 👥 PANTALLA EXCLUSIVA PARA CLIENTES (Y ACCESO MAESTRO)
     st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
    
@@ -65,18 +64,18 @@ if not st.session_state["es_admin"]:
             submit_login = st.form_submit_button("🚀 Entrar al Sistema")
            
             if submit_login:
-                # Credenciales maestras para habilitar tu panel de desarrollador
+                # Credenciales maestras para activar tu panel de desarrollador
                 if usuario_ingresado == "admin" and password_ingresada == "SIMON1908":
                     st.session_state["es_admin"] = True
                     st.rerun()
                 else:
-                    # Aquí irá la validación normal de tus clientes en el futuro
+                    # Aquí irá la validación normal de tus clientes cuando ingresen sus datos
                     st.error("❌ Credenciales incorrectas")
                     
-    # 🛑 Esto detiene la ejecución para que los clientes no visualicen nada más
+    # 🛑 DETIENE LA EJECUCIÓN: Los clientes nunca verán nada más de la aplicación
     st.stop()
 
-# --- 🛠️ VISTA EXCLUSIVA DEL ADMINISTRADOR (PANEL DE DESARROLLAR Y SUPABASE) ---
+# --- 🛠️ VISTA EXCLUSIVA DEL ADMINISTRADOR (DESDE AQUÍ HACIA ABAJO) ---
 with st.sidebar:
     st.markdown("### 🛠️ Control Maestro")
     if st.button("🔒 Cerrar Sesión"):
@@ -132,11 +131,10 @@ with st.sidebar:
                         "cobrar": m_cxp
                     }
                 }
-                # guardar_nuevo_cliente(id_negocio, datos_nuevo)
                 st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                 st.rerun()
 
-# 🔌 Conexión a Supabase usando st.secrets (Solo visible para ti)
+# 🔌 Conexión a Supabase (Solo se ejecuta si `es_admin` es True)
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)

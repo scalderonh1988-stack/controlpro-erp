@@ -1720,6 +1720,16 @@ elif menu == "💰 Módulo de Ventas (POS)":
     mostrar_encabezado_con_home(f"Terminal de Ventas - {caja_actual}")
 
     tipo_documento = st.selectbox("Selecciona el documento:", ["Boleta Electrónica", "Factura Electrónica", "Guía de Despacho"])
+    
+    # ⚙️ Selector de modo de trabajo del inventario en el POS
+    modo_inventario = st.radio(
+        "📦 Modo de trabajo del POS:",
+        ["Control Estricto de Stock (Alerta si no hay inventario)", "Venta Libre / Solo Base de Datos"],
+        horizontal=True,
+        key="radio_modo_inventario"
+    )
+    controlar_stock = "Estricto" in modo_inventario
+
     cliente_nombre, cliente_rut = "", ""
 
     # 1. Lógica de Selección de Clientes (Solo para Factura/Guía)
@@ -1734,7 +1744,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
                 df_clientes_pos = pd.DataFrame(columns=["Nombre_Cliente", "Rut", "Telefono", "Email", "Direccion"])
 
         if not df_clientes_pos.empty and "Nombre_Cliente" in df_clientes_pos.columns:
-            # Asegurar formato de columnas
             col_nom = "Nombre_Cliente"
             col_rut = "Rut" if "Rut" in df_clientes_pos.columns else df_clientes_pos.columns[1]
             
@@ -1756,7 +1765,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
         st.success("🎉 ¡Transacción completada!")
         st.markdown(f'<div class="ticket-box">{st.session_state.ultimo_recibo}</div>', unsafe_allow_html=True)
       
-        # Guardar respaldo del carrito al completar la venta si no existe
         if 'items_recibo_actual' not in st.session_state or st.session_state.items_recibo_actual is None:
             st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
 
@@ -1833,7 +1841,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         else:
                             df_nuevo.to_excel(archivo_mensual, index=False)
 
-                        # Registro en Cuentas por Cobrar si aplica
                         if any(p in forma_pago.lower() for p in ["fiado", "crédito", "credito", "consignación", "consignacion"]):
                             archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
                             registro_cxp = pd.DataFrame([{
@@ -1948,14 +1955,30 @@ PAGO: {forma_pago.upper()}
                     if producto_seleccionado == "-- Selecciona o busca un producto --":
                         st.warning("⚠️ Selecciona un producto válido.")
                     else:
-                        st.session_state.carrito_ventas.append({
-                            "Código": producto_seleccionado.split(" - ")[0],
-                            "Descripción": producto_seleccionado.split(" - ")[1],
-                            "Cantidad": float(cantidad_vendida),
-                            "Precio Unitario": float(precio_venta),
-                            "Subtotal": float(cantidad_vendida) * float(precio_venta)
-                        })
-                        st.rerun()
+                        c_buscado = producto_seleccionado.split(" - ")[0]
+                        match_row = df_base[df_base[col_cod].astype(str) == str(c_buscado)]
+                        
+                        stock_disponible = 0.0
+                        col_stock_name = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower()), None)
+                        
+                        if not match_row.empty and col_stock_name:
+                            stock_disponible = float(match_row.iloc[0][col_stock_name])
+
+                        unidades_en_carrito = sum(item["Cantidad"] for item in st.session_state.carrito_ventas if item["Código"] == c_buscado)
+                        total_intentado = unidades_en_carrito + float(cantidad_vendida)
+
+                        if controlar_stock and col_stock_name and total_intentado > stock_disponible:
+                            st.error(f"🚨 **¡Inventario Insuficiente!** Stock disponible: {stock_disponible:,.2f} | Intentas vender: {total_intentado:,.2f}")
+                        else:
+                            st.session_state.carrito_ventas.append({
+                                "Código": c_buscado,
+                                "Descripción": producto_seleccionado.split(" - ")[1],
+                                "Cantidad": float(cantidad_vendida),
+                                "Precio Unitario": float(precio_venta),
+                                "Subtotal": float(cantidad_vendida) * float(precio_venta)
+                            })
+                            st.success("✅ Producto agregado con éxito.")
+                            st.rerun()
 
         st.divider()
         st.markdown("### 🛒 Carrito de Venta Actual:")

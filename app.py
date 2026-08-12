@@ -493,7 +493,7 @@ if not st.session_state.autenticado:
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         with st.form("form_login_unificado"):
-            usuario_input = st.text_input("👤 Usuario / RUT / Admin:")
+            usuario_input = st.text_input("👤 Usuario / RUT / Operador:")
             password_input = st.text_input("🔑 Contraseña:", type="password")
             btn_ingresar = st.form_submit_button("🚀 Entrar al Sistema", use_container_width=True)
          
@@ -504,6 +504,7 @@ if not st.session_state.autenticado:
             if not usuario_limpio or not password_limpio:
                 st.error("❌ Debes ingresar tanto el usuario como la contraseña.")
             else:
+                # 1. Validación Admin Master
                 if usuario_limpio.lower() in ["admin", "desarrollador", "simon"] and password_limpio == "SIMON1908":
                     st.session_state.autenticado = True
                     st.session_state.es_admin_dev = True
@@ -514,6 +515,7 @@ if not st.session_state.autenticado:
                     st.success("🛠️ ¡Bienvenido Maestro! Accediendo al entorno completo...")
                     st.rerun()
                 else:
+                    # 2. Buscar si es la empresa principal (por RUT)
                     empresa_encontrada = next((emp for emp in empresas_data if emp["rut_empresa"] == usuario_limpio), None)
 
                     if empresa_encontrada and empresa_encontrada.get("licencia_activa", True):
@@ -525,11 +527,38 @@ if not st.session_state.autenticado:
                         st.session_state.negocio_actual = negocio_asignado
                         st.session_state.usuario_logueado = usuario_input
                         st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
-                        st.session_state.rol_usuario = "Administrador"  # Perfil por defecto para clientes autenticados
-                        st.success(f"🏠 ¡Bienvenido! Ingresando al Home de {str(st.session_state.nombre_empresa).upper()}...")
+                        st.session_state.rol_usuario = "Administrador" # Dueño entra como Admin
+                        st.success(f"🏠 ¡Bienvenido Administrador! Ingresando al Home de {str(st.session_state.nombre_empresa).upper()}...")
                         st.rerun()
                     else:
-                        st.error("❌ Credenciales incorrectas o licencia inactiva.")
+                        # 3. Buscar si es un operador secundario creado dentro de la carpeta del negocio
+                        acceso_exitoso = False
+                        for neg_folder in os.listdir(CLIENTES_DIR):
+                            folder_path = os.path.join(CLIENTES_DIR, neg_folder)
+                            if os.path.isdir(folder_path):
+                                arch_usr = os.path.join(folder_path, "usuarios_negocio.json")
+                                if os.path.exists(arch_usr):
+                                    with open(arch_usr, "r", encoding="utf-8") as f:
+                                        diccionario_users = json.load(f)
+                                        if usuario_limpio in diccionario_users:
+                                            datos_usr = diccionario_users[usuario_limpio]
+                                            if datos_usr.get("password") == password_limpio:
+                                                # ¡Credenciales correctas de empleado!
+                                                st.session_state.autenticado = True
+                                                st.session_state.es_admin_dev = False
+                                                st.session_state.negocio_actual = neg_folder
+                                                st.session_state.usuario_logueado = datos_usr.get("nombre", usuario_limpio)
+                                                st.session_state.rol_usuario = datos_usr.get("rol", "Cajero / Vendedor")
+                                                
+                                                emp_info = next((emp for emp in empresas_data if emp["rut_empresa"] == neg_folder), None)
+                                                st.session_state.nombre_empresa = emp_info.get("empresa_nombre") if emp_info else neg_folder
+                                                
+                                                st.success(f"🟢 ¡Bienvenido {st.session_state.usuario_logueado}! Rol asignado: {st.session_state.rol_usuario}")
+                                                acceso_exitoso = True
+                                                st.rerun()
+                        
+                        if not acceso_exitoso:
+                            st.error("❌ Credenciales incorrectas, usuario no encontrado o licencia inactiva.")
     st.stop()
 
 
@@ -1994,6 +2023,18 @@ elif menu == "⚙️ Configuración General":
     ruta_plantilla_base = os.path.join("plantilla_cliente", "BASE DE DATOS.xlsx")
     ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
     ruta_config_json = os.path.join(tenant_dir, "config_ticket.json")
+    ruta_usuarios_local = os.path.join(tenant_dir, "usuarios_negocio.json")
+
+    # Funciones auxiliares para manejo local de usuarios
+    def cargar_usuarios_local(path):
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
+
+    def guardar_usuarios_local(path, datos):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(datos, f, indent=4, ensure_ascii=False)
 
     # 🔄 Validar y recargar la configuración si cambia el negocio seleccionado
     if "ultimo_negocio_config" not in st.session_state or st.session_state.ultimo_negocio_config != negocio_seleccionado:
@@ -2010,16 +2051,49 @@ elif menu == "⚙️ Configuración General":
     tab1, tab2, tab3 = st.tabs(["👥 Usuarios y Cajas", "💳 Formas de Pago", "🖨️ Formato de Tickets e Impresión"])
 
     with tab1:
-        st.markdown("### 👥 Administración de Accesos del Negocio")
-        st.info(f"Actualmente configurando las cajas y usuarios para: **{negocio_seleccionado}**")
-        with st.form("form_nuevo_usuario_config"):
-            col_u1, col_u2, col_u3 = st.columns(3)
-            with col_u1: nuevo_user = st.text_input("ID de Usuario (ej: cajero3)")
-            with col_u2: nuevo_nombre = st.text_input("Nombre / Descripción (ej: Caja 03)")
-            with col_u3: nueva_caja_id = st.text_input("Identificador de Caja (ej: Caja_03)")
-            btn_crear_user = st.form_submit_button("💾 Registrar Terminal")
-            if btn_crear_user and nuevo_user and nueva_caja_id:
-                st.success(f"✅ ¡Terminal {nueva_caja_id} registrado para este negocio!")
+        st.markdown("### 👥 Creación y Gestión de Operadores del Negocio")
+        st.info("ℹ️ Registra nuevos operadores (cajeros, bodegueros, etc.) para que ingresen al sistema con su propia contraseña y rol asignado.")
+
+        db_usuarios = cargar_usuarios_local(ruta_usuarios_local)
+
+        with st.form("form_crear_operador"):
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                nuevo_user_id = st.text_input("ID de Usuario / RUT (ej: cajero1)")
+                nuevo_nombre_usr = st.text_input("Nombre Completo o Descripción (ej: Juan Pérez - Caja 1)")
+            with col_u2:
+                nuevo_pass_usr = st.text_input("Contraseña de Acceso", type="password")
+                nuevo_rol_usr = st.selectbox("Rol / Permisos", options=["Cajero / Vendedor", "Bodeguero", "Administrador"])
+
+            btn_guardar_usr = st.form_submit_button("💾 Registrar Nuevo Operador", type="primary")
+
+            if btn_guardar_usr:
+                user_limpio = nuevo_user_id.strip()
+                if not user_limpio or not nuevo_pass_usr:
+                    st.warning("⚠️ Debes ingresar el ID de usuario y la contraseña.")
+                else:
+                    db_usuarios[user_limpio] = {
+                        "nombre": nuevo_nombre_usr or user_limpio,
+                        "password": nuevo_pass_usr.strip(),
+                        "rol": nuevo_rol_usr
+                    }
+                    guardar_usuarios_local(ruta_usuarios_local, db_usuarios)
+                    st.success(f"✨ ¡Usuario '{user_limpio}' creado con éxito bajo el rol de {nuevo_rol_usr}!")
+                    st.rerun()
+
+        st.divider()
+        st.markdown("### 📋 Operadores Registrados")
+        if db_usuarios:
+            lista_tabla = []
+            for uid, info in db_usuarios.items():
+                lista_tabla.append({
+                    "Usuario / RUT": uid,
+                    "Nombre": info.get("nombre"),
+                    "Rol Asignado": info.get("rol")
+                })
+            st.dataframe(pd.DataFrame(lista_tabla), use_container_width=True)
+        else:
+            st.info("ℹ️ No hay operadores secundarios registrados todavía. El acceso principal opera con las credenciales globales de la empresa.")
 
     with tab2:
         st.markdown("### 💳 Configuración de Formas de Pago Aceptadas")
@@ -2069,7 +2143,6 @@ elif menu == "⚙️ Configuración General":
     
         logo_cargado = st.file_uploader("Sube una imagen para tu logo (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_logo_empresa")
         if logo_cargado is not None:
-            # 📂 Asegurar que la carpeta del negocio exista antes de guardar
             os.makedirs(tenant_dir, exist_ok=True)
             img = Image.open(logo_cargado)
             if img.mode != 'RGB':

@@ -698,15 +698,6 @@ if st.session_state.es_admin_dev:
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
                         st.rerun()
 
-# 📌 Selector opcional de rol para pruebas rápidas en la barra lateral
-st.sidebar.divider()
-rol_seleccionado_sidebar = st.sidebar.selectbox(
-    "👤 Perfil / Rol Activo:",
-    options=list(ROLES_PERMISOS.keys()),
-    index=0,
-    key="selector_rol_activo"
-)
-st.session_state.rol_usuario = rol_seleccionado_sidebar
 
 # 📌 Créditos al desarrollador en el footer de la barra lateral
 st.sidebar.markdown("---")

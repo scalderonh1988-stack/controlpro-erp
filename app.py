@@ -47,32 +47,53 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicializar el estado de sesión para el administrador
+# Inicializar estados de sesión
 if "es_admin" not in st.session_state:
     st.session_state["es_admin"] = False
+if "cliente_logueado" not in st.session_state:
+    st.session_state["cliente_logueado"] = None
 
-# --- 👥 VISTA EXCLUSIVA PARA CLIENTES (ACCESO UNIFICADO) ---
-if not st.session_state["es_admin"]:
+# --- 1. SI NO HA INICIADO SESIÓN NADIE (MOSTRAR LOGIN ÚNICO) ---
+if not st.session_state["es_admin"] and not st.session_state["cliente_logueado"]:
     st.markdown("<div class='main-title'>ControlPRO ERP - Acceso Unificado</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-title'>Ingresa tus credenciales para acceder a tu negocio</div>", unsafe_allow_html=True)
    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        with st.form("form_login_unico"):
+        with st.form("form_login_unificado"):
             usuario_ingresado = st.text_input("Usuario / RUT:")
             password_ingresada = st.text_input("Contraseña:", type="password")
             submit_login = st.form_submit_button("🚀 Entrar al Sistema")
            
             if submit_login:
-                # Credenciales maestras para activar tu panel de desarrollador
-                if usuario_ingresado == "admin" and password_ingresada == "SIMON1908":
+                # A) Si eres tú (Desarrollador/Admin)
+                if usuario_ingresado == "15382273-5" and password_ingresada == "SIMON1908": # O tu usuario admin
                     st.session_state["es_admin"] = True
                     st.rerun()
                 else:
-                    # Aquí irá la validación normal de tus clientes cuando ingresen sus datos
-                    st.error("❌ Credenciales incorrectas")
-                    
-    # 🛑 DETIENE LA EJECUCIÓN: Los clientes nunca verán nada más de la aplicación
+                    # B) Validar si es un cliente registrado en Supabase o en tus carpetas
+                    # Aquí conectamos a Supabase solo para verificar el RUT y contraseña del cliente
+                    try:
+                        url = st.secrets["supabase"]["url"]
+                        key = st.secrets["supabase"]["key"]
+                        supabase: Client = create_client(url, key)
+                        
+                        # Buscamos si el RUT existe en la tabla empresas
+                        resultado = supabase.table("empresas").select("*").eq("rut_empresa", usuario_ingresado.strip()).execute()
+                        datos_empresa = resultado.data
+                        
+                        if datos_empresa:
+                            # Si el cliente existe, validamos su acceso directo
+                            st.session_state["cliente_logueado"] = usuario_ingresado.strip()
+                            st.session_state["negocio_seleccionado"] = datos_empresa[0].get("id") # O su carpeta asociada
+                            st.success("✅ Acceso exitoso")
+                            st.rerun()
+                        else:
+                            st.error("❌ RUT o contraseña incorrectos")
+                    except Exception as e:
+                        st.error(f"Error al conectar con la base de datos: {e}")
+                        
+    # 🛑 Esto detiene la ejecución para que los clientes o usuarios sin sesión no vean nada más
     st.stop()
 
 # --- 🛠️ VISTA EXCLUSIVA DEL ADMINISTRADOR (DESDE AQUÍ HACIA ABAJO) ---

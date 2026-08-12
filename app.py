@@ -194,23 +194,14 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
 
     df_cxp = pd.read_excel(archivo_cxp)
     
-    # --- CÁLCULO DE DÍAS DE ATRASO ---
     if not df_cxp.empty:
-        # Asegurarnos de que exista una columna de fecha de vencimiento (si se llama FechaVencimiento o Vencimiento)
         col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
         
         if col_venc:
             hoy = pd.to_datetime(date.today())
-            # Convertir la columna de vencimiento a formato fecha
             fechas_venc = pd.to_datetime(df_cxp[col_venc], errors='coerce')
-            
-            # Calcular días de diferencia solo para los que tienen saldo pendiente > 0 o en general
             dias_atraso = (hoy - fechas_venc).dt.days
-            
-            # Si el saldo ya está pagado o al día, los días de atraso se fijan en 0
             dias_atraso = dias_atraso.apply(lambda x: x if x > 0 else 0)
-            
-            # Insertar o actualizar la columna en el DataFrame visual
             df_cxp["DiasAtraso"] = dias_atraso
         else:
             df_cxp["DiasAtraso"] = 0
@@ -251,7 +242,6 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
                         df_cxp.loc[idx, "Abono"] += monto_abono
                     st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
               
-                # Guardar sin la columna temporal de visualización DiasAtraso para no duplicarla en el Excel
                 if "DiasAtraso" in df_cxp.columns:
                     df_cxp = df_cxp.drop(columns=["DiasAtraso"])
                     
@@ -273,11 +263,87 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
+    
+    st.markdown("""
+        <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
+            <strong>📌 Cuaderno Diario de Caja:</strong> Registra los ingresos operativos diarios, calcula la venta total y 
+            protege tu capital de reposición aplicando el Markup configurado.
+        </div>
+    """, unsafe_allow_html=True)
+
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
     if not os.path.exists(archivo_cuadratura):
-        pd.DataFrame(columns=['Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 'Total_Dia', 'Observaciones']).to_excel(archivo_cuadratura, index=False)
-    df_cuadratura = pd.read_excel(archivo_cuadratura)
-    st.dataframe(df_cuadratura, use_container_width=True)
+        pd.DataFrame(columns=[
+            'Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 
+            'VentaTotal', 'MarkupAplicado', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones'
+        ]).to_excel(archivo_cuadratura, index=False)
+
+    with st.form("form_cuadratura_diaria"):
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
+            efectivo_c = st.number_input("💵 Efectivo en Caja ($)", min_value=0.0, step=100.0, value=0.0)
+            transferencia_c = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_f2:
+            debito_c = st.number_input("💳 Débito / Tarjetas ($)", min_value=0.0, step=100.0, value=0.0)
+            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
+            otros_ingresos_c = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
+
+        st.divider()
+        st.markdown("#### ⚙️ Parámetro de Markup para Retiro Seguro")
+        markup_default = st.number_input("Porcentaje de Markup / Margen Promedio (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
+
+        venta_total_calculada = efectivo_c + transferencia_c + debito_c + cigarrillos_c + otros_ingresos_c
+
+        markup_dec = markup_default / 100.0
+        costo_reposicion_mercaderia = venta_total_calculada / (1.0 + markup_dec)
+        utilidad_neta_disponible = venta_total_calculada - costo_reposicion_mercaderia
+
+        st.divider()
+        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        with col_res1:
+            st.metric(label="🪙 Venta Total Día", value=f"${venta_total_calculada:,.2f}")
+        with col_res2:
+            st.metric(label="🔒 Fondo Reposición (Intocable)", value=f"${costo_reposicion_mercaderia:,.2f}", delta="No retirar")
+        with col_res3:
+            st.metric(label="💵 Utilidad Retirable Segura", value=f"${utilidad_neta_disponible:,.2f}", delta="Disponible")
+        with col_res4:
+            st.metric(label="📈 Markup Aplicado", value=f"{markup_default}%")
+
+        observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal")
+
+        btn_guardar_cuat = st.form_submit_button("💾 Guardar Cuadratura y Retiro", type="primary")
+
+        if btn_guardar_cuat:
+            if venta_total_calculada <= 0:
+                st.warning("⚠️ Debes ingresar al menos un monto en los ingresos de caja.")
+            else:
+                df_cuat_ant = pd.read_excel(archivo_cuadratura)
+                nuevo_registro = pd.DataFrame([{
+                    'Fecha': str(fecha_cuat),
+                    'Efectivo': efectivo_c,
+                    'Transferencia': transferencia_c,
+                    'Debito': debito_c,
+                    'Cigarros': cigarrillos_c,
+                    'Otros_Ingresos': otros_ingresos_c,
+                    'VentaTotal': venta_total_calculada,
+                    'MarkupAplicado': markup_default,
+                    'CostoReposicion': costo_reposicion_mercaderia,
+                    'UtilidadRetirable': utilidad_neta_disponible,
+                    'Observaciones': observaciones_c
+                }])
+                pd.concat([df_cuat_ant, nuevo_registro], ignore_index=True).to_excel(archivo_cuadratura, index=False)
+                st.success("✅ ¡Cuadratura guardada con éxito! Capital protegido correctamente.")
+                st.rerun()
+
+    st.divider()
+    st.markdown("### 📂 Historial de Cuadraturas Registradas")
+    if os.path.exists(archivo_cuadratura):
+        df_cuadratura = pd.read_excel(archivo_cuadratura)
+        if not df_cuadratura.empty:
+            st.dataframe(df_cuadratura, use_container_width=True)
+        else:
+            st.info("ℹ️ No hay registros guardados todavía.")
 
 
 def mostrar_modulo_registro_gastos(ruta_negocio):
@@ -290,7 +356,10 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
 
 
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):
-    mostrar_encabezado_con_home("🏦 Conciliación Bancaria y Retiros Protegidos por Markup")
+    if "mostrar_encabezado_con_home" in globals():
+        mostrar_encabezado_con_home("🏦 Conciliación Bancaria y Retiros Protegidos por Markup")
+    else:
+        st.markdown("### 🏦 Conciliación Bancaria y Retiros Protegidos por Markup")
     
     st.markdown("""
         <div style='background-color: #EFF6FF; padding: 15px; border-radius: 8px; border-left: 4px solid #3B82F6; margin-bottom: 20px;'>
@@ -300,7 +369,6 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
         </div>
     """, unsafe_allow_html=True)
 
-    # Archivo de registros de retiros y parámetros
     archivo_retiros = os.path.join(ruta_negocio, "Registro_Retiros_Seguros.xlsx")
     if not os.path.exists(archivo_retiros):
         pd.DataFrame(columns=['Fecha', 'VentaTotal', 'MarkupAplicado', 'CostoMercaderia', 'UtilidadRealRetirable', 'RetiroEfectuado', 'Observaciones']).to_excel(archivo_retiros, index=False)
@@ -319,8 +387,6 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
                 markup_porcentaje = st.number_input("📈 Markup / Margen Promedio (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0, help="Porcentaje de margen estimado sobre el costo aplicado a tus productos.")
                 observacion_retiro = st.text_input("📝 Notas u Observaciones del Día", value="Cierre diario normal")
 
-            # Cálculo matemático transparente del Markup
-            # Fórmula inversa estándar: Venta = Costo * (1 + Markup/100) -> Costo = Venta / (1 + Markup/100)
             markup_decimal = markup_porcentaje / 100.0
             costo_reposicion = venta_dia_input / (1.0 + markup_decimal)
             utilidad_neta_retirable = venta_dia_input - costo_reposicion

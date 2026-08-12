@@ -1103,12 +1103,25 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
 elif menu == "⚠️ Control y Gestión de Inventario":
     mostrar_encabezado_con_home("⚠️ Panel de Control Operativo y Alertas de Inventario")
   
+    # ⚙️ PANEL DE PARAMETRIZACIÓN OPERATIVA MANUAL
+    with st.expander("⚙️ Configurar Parámetros de Operación e Inventario", expanded=False):
+        st.markdown("Ajusta los valores operativos según la logística y tiempos de tu negocio:")
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        
+        with col_p1:
+            lead_time_dias = st.number_input("🚚 Lead Time Proveedor (Días)", min_value=1, max_value=90, value=3, step=1, help="Tiempo que demora el proveedor en entregar mercadería.")
+        with col_p2:
+            consumo_diario_estimado = st.number_input("📈 Consumo Promedio Diario (Unid)", min_value=0.1, max_value=10000.0, value=1.5, step=0.1, help="Venta o consumo diario estimado por producto si no hay histórico detallado.")
+        with col_p3:
+            limite_sobrestock_semanas = st.number_input("🛑 Límite de Sobrestock (Semanas)", min_value=1, max_value=52, value=4, step=1, help="Semanas máximas de stock permitidas antes de marcar exceso de capital.")
+        with col_p4:
+            dias_alerta_roja = st.number_input("🔴 Alerta Crítica Vencimiento (Días)", min_value=1, max_value=30, value=7, step=1, help="Días restantes para considerar un lote en zona roja.")
+
     sub_tab1, sub_tab2, sub_tab3 = st.tabs(["🚦 Semáforo de Vencimientos", "📦 Sugerencia de Reabastecimiento", "🛑 Control de Sobrestock"])
 
     with sub_tab1:
-        st.markdown("### 🚦 Clasificación Automática de Vencimientos (Lotes Activos)")
+        st.markdown(f"### 🚦 Clasificación Automática de Vencimientos (Lotes Activos)")
       
-        # Leemos la base de lotes independientes que creamos en compras
         archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
        
         if os.path.exists(archivo_lotes):
@@ -1124,7 +1137,6 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                 fecha_val = row.get('FechaVencimiento')
                 lote_val = str(row.get('Lote', 'N/A'))
                
-                # Ignoramos si no tiene lote o fecha válida
                 if pd.notna(fecha_val) and lote_val != "N/A" and str(fecha_val) != "N/A":
                     try:
                         f_venc = pd.to_datetime(fecha_val).date()
@@ -1139,31 +1151,31 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                             "Días Restantes": dias
                         }
                        
-                        # Filtramos los que están dentro del rango de los próximos 30 días o vencidos
-                        if dias <= 7:
+                        # Rangos dinámicos basados en los parámetros del usuario
+                        if dias <= dias_alerta_roja:
                             roja.append(item)
-                        elif 8 <= dias <= 15:
+                        elif dias_alerta_roja < dias <= (dias_alerta_roja + 8):
                             amarilla.append(item)
-                        elif 16 <= dias <= 30:
+                        elif (dias_alerta_roja + 9) <= dias <= (dias_alerta_roja + 23):
                             verde.append(item)
-                    except Exception as e:
+                    except Exception:
                         pass
 
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.error(f"🔴 Zona Roja <= 7 días ({len(roja)})")
+                st.error(f"🔴 Zona Roja <= {dias_alerta_roja} días ({len(roja)})")
                 if roja:
                     st.dataframe(pd.DataFrame(roja), use_container_width=True)
                 else:
                     st.caption("Sin productos en riesgo crítico.")
             with c2:
-                st.warning(f"🟡 Zona Amarilla 8-15 días ({len(amarilla)})")
+                st.warning(f"🟡 Zona Amarilla ({len(amarilla)})")
                 if amarilla:
                     st.dataframe(pd.DataFrame(amarilla), use_container_width=True)
                 else:
                     st.caption("Sin productos en alerta media.")
             with c3:
-                st.success(f"🟢 Zona Verde 16-30 días ({len(verde)})")
+                st.success(f"🟢 Zona Verde ({len(verde)})")
                 if verde:
                     st.dataframe(pd.DataFrame(verde), use_container_width=True)
                 else:
@@ -1172,7 +1184,7 @@ elif menu == "⚠️ Control y Gestión de Inventario":
             st.info("ℹ️ Aún no hay registros de lotes con fecha de vencimiento guardados para este negocio.")
 
     with sub_tab2:
-        st.markdown("### 📦 Asistente de Reabastecimiento Automático (Lead Time 72 horas)")
+        st.markdown(f"### 📦 Asistente de Reabastecimiento Automático (Lead Time configurado: {lead_time_dias} días)")
         if df_base is not None:
             col_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower() or 'existencia' in str(c).lower()), None)
             col_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower()), 'Descripción')
@@ -1180,23 +1192,30 @@ elif menu == "⚠️ Control y Gestión de Inventario":
 
             if col_stock:
                 sugerencias = []
+                consumo_periodo_lt = consumo_diario_estimado * lead_time_dias
+                demanda_semanal = consumo_diario_estimado * 7.0
+
                 for idx, row in df_base.iterrows():
                     stock = float(row.get(col_stock, 0)) if pd.notna(row.get(col_stock)) else 0.0
-                    demanda_semanal, consumo_72h = 10.0, (10.0 / 7.0) * 3.0
-                    if stock <= consumo_72h:
-                        sugerencias.append({'Código': str(row.get(col_cod, '')), 'Descripción': str(row.get(col_desc, '')), 'Stock Actual': stock, 'Sugerido a Comprar': round(demanda_semanal - stock + consumo_72h, 2)})
+                    if stock <= consumo_periodo_lt:
+                        sugerencias.append({
+                            'Código': str(row.get(col_cod, '')),
+                            'Descripción': str(row.get(col_desc, '')),
+                            'Stock Actual': stock,
+                            'Sugerido a Comprar': round(demanda_semanal - stock + consumo_periodo_lt, 2)
+                        })
                 if sugerencias:
-                    st.warning(f"⚠️ {len(sugerencias)} productos en riesgo de quiebre.")
+                    st.warning(f"⚠️ {len(sugerencias)} productos en riesgo de quiebre según el lead time actual.")
                     st.dataframe(pd.DataFrame(sugerencias), use_container_width=True)
                 else:
-                    st.success("✔️ Todo el inventario soporta holgadamente las 72 horas de entrega.")
+                    st.success(f"✔️ Todo el inventario soporta holgadamente los {lead_time_dias} días de entrega.")
             else:
                 st.warning("⚠️ Falta la columna de stock.")
         else:
             st.error("⚠️ Falta la base de datos.")
 
     with sub_tab3:
-        st.markdown("### 🛑 Control de Capital Inmovilizado y Exceso de Stock (> 4 semanas)")
+        st.markdown(f"### 🛑 Control de Capital Inmovilizado y Exceso de Stock (> {limite_sobrestock_semanas} semanas)")
         if df_base is not None:
             col_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower() or 'existencia' in str(c).lower()), None)
             col_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower()), 'Descripción')
@@ -1204,10 +1223,19 @@ elif menu == "⚠️ Control y Gestión de Inventario":
 
             if col_stock:
                 excesos = []
+                demanda_semanal = consumo_diario_estimado * 7.0
+
                 for idx, row in df_base.iterrows():
                     stock = float(row.get(col_stock, 0)) if pd.notna(row.get(col_stock)) else 0.0
-                    if (stock / 10.0) > 4.0:
-                        excesos.append({'Código': str(row.get(col_cod, '')), 'Descripción': str(row.get(col_desc, '')), 'Stock Actual': stock, 'Semanas': round(stock / 10.0, 1)})
+                    semanas_stock = (stock / demanda_semanal) if demanda_semanal > 0 else 0.0
+                    
+                    if semanas_stock > limite_sobrestock_semanas:
+                        excesos.append({
+                            'Código': str(row.get(col_cod, '')),
+                            'Descripción': str(row.get(col_desc, '')),
+                            'Stock Actual': stock,
+                            'Semanas de Stock': round(semanas_stock, 1)
+                        })
                 if excesos:
                     st.warning(f"💡 {len(excesos)} productos con sobrestock detectados.")
                     st.dataframe(pd.DataFrame(excesos), use_container_width=True)

@@ -3049,17 +3049,28 @@ elif menu == "🔑 Control Maestro de Licencias":
         cliente_sel_data = next((emp for emp in lista_empresas_db if emp.get("rut_empresa") == rut_a_modificar), None)
         
         if cliente_sel_data:
-            f_actual_exp_str = cliente_sel_data.get("fecha_expiracion", str(hoy_actual))
+            f_actual_exp_str = cliente_sel_data.get("fecha_expiracion")
             
             with st.form(f"form_mod_fechas_principal_{rut_a_modificar}"):
-                st.write(f"📌 *Editando a:* {cliente_sel_data.get('empresa_nombre')}")
+                st.write(f"📌 **Editando a:** {cliente_sel_data.get('empresa_nombre')}")
+                
+                # --- BLINDAJE CONTRA CELDAS VACÍAS (NULL) EN SUPABASE ---
                 try:
-                    f_default_date = pd.to_datetime(f_actual_exp_str).date()
+                    if f_actual_exp_str and str(f_actual_exp_str).strip() not in ["None", "NaT", "nan", ""]:
+                        f_default_date = pd.to_datetime(str(f_actual_exp_str)).date()
+                    else:
+                        f_default_date = hoy_actual
                 except Exception:
                     f_default_date = hoy_actual
+                # ---------------------------------------------------------
 
                 nueva_fecha_fin = st.date_input("Fecha de Finalización del Periodo", value=f_default_date)
-                activar_licencia_check = st.checkbox("Licencia Activa (Desmarcar para suspensión total)", value=bool(cliente_sel_data.get("licencia_activa", True)))
+                
+                # Blindaje para el checkbox por si la columna licencia_activa está en NULL
+                estado_licencia = cliente_sel_data.get("licencia_activa")
+                estado_licencia = True if estado_licencia is None else bool(estado_licencia)
+                
+                activar_licencia_check = st.checkbox("Licencia Activa (Desmarcar para suspensión total)", value=estado_licencia)
 
                 if st.form_submit_button("💾 Guardar Nueva Vigencia en Supabase", type="primary"):
                     try:

@@ -1090,32 +1090,77 @@ elif menu == "📑 Cuentas por Cobrar":
 elif menu == "📊 Dashboard Ejecutivo":
     mostrar_encabezado_con_home("⚡ Resumen Ejecutivo en Tiempo Real")
    
+    # 🕒 Selector de Período Temporal en Tiempo Real
+    st.markdown("### 🎛️ Filtro Temporal de Análisis")
+    col_f1, col_f2 = st.columns([2, 2])
+    with col_f1:
+        periodo_seleccionado = st.selectbox(
+            "Selecciona el período a visualizar:",
+            options=["Diaria (Hoy)", "Semanal (Últimos 7 días)", "Quincenal (Últimos 15 días)", "Mensual (Últimos 30 días)", "Histórico Completo"],
+            index=3
+        )
+
+    # Definir la fecha límite según el filtro elegido
+    hoy_dt = pd.to_datetime(date.today())
+    if periodo_seleccionado == "Diaria (Hoy)":
+        fecha_limite = hoy_dt
+    elif periodo_seleccionado == "Semanal (Últimos 7 días)":
+        fecha_limite = hoy_dt - pd.Timedelta(days=7)
+    elif periodo_seleccionado == "Quincenal (Últimos 15 días)":
+        fecha_limite = hoy_dt - pd.Timedelta(days=15)
+    elif periodo_seleccionado == "Mensual (Últimos 30 días)":
+        fecha_limite = hoy_dt - pd.Timedelta(days=30)
+    else:
+        fecha_limite = None
+
     # Rutas y archivos del negocio actual
     archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
     archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
     archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
 
-    # 1. Cálculo de Ventas Históricas desde el Libro de Ventas
+    # 1. Cálculo de Ventas Filtradas por Período
     archivos_v = [f for f in os.listdir(ruta_negocio) if f.startswith("Libro_Ventas_") and f.endswith(".xlsx")]
-    total_ventas_historico = 0.0
+    total_ventas_periodo = 0.0
     if archivos_v:
         for ar in archivos_v:
             path_v = os.path.join(ruta_negocio, ar)
             df_temp_v = pd.read_excel(path_v)
             if not df_temp_v.empty:
+                # Filtrar por fecha si existe columna temporal
+                col_fecha = next((c for c in df_temp_v.columns if 'fecha' in str(c).lower() or 'timestamp' in str(c).lower()), None)
+                if col_fecha and fecha_limite is not None:
+                    df_temp_v['Fecha_Parsed'] = pd.to_datetime(df_temp_v[col_fecha], errors='coerce')
+                    if periodo_seleccionado == "Diaria (Hoy)":
+                        df_temp_v = df_temp_v[df_temp_v['Fecha_Parsed'].dt.date == hoy_dt.date()]
+                    else:
+                        df_temp_v = df_temp_v[df_temp_v['Fecha_Parsed'] >= fecha_limite]
+                
                 col_tot = next((c for c in df_temp_v.columns if 'total' in str(c).lower()), None)
-                if col_tot:
-                    total_ventas_historico += df_temp_v.drop_duplicates(subset=["TransaccionID"])[col_tot].sum()
+                if col_tot and not df_temp_v.empty:
+                    if "TransaccionID" in df_temp_v.columns:
+                        total_ventas_periodo += df_temp_v.drop_duplicates(subset=["TransaccionID"])[col_tot].sum()
+                    else:
+                        total_ventas_periodo += df_temp_v[col_tot].sum()
 
-    # 2. Cálculo de Gastos Totales
-    total_gastos = 0.0
+    # 2. Cálculo de Gastos Filtrados por Período
+    total_gastos_periodo = 0.0
+    df_g_filtrado = pd.DataFrame()
     if os.path.exists(archivo_gastos):
         df_g = pd.read_excel(archivo_gastos)
         if not df_g.empty and 'Monto' in df_g.columns:
-            total_gastos = df_g['Monto'].sum()
+            if 'Fecha' in df_g.columns and fecha_limite is not None:
+                df_g['Fecha_Parsed'] = pd.to_datetime(df_g['Fecha'], errors='coerce')
+                if periodo_seleccionado == "Diaria (Hoy)":
+                    df_g_filtrado = df_g[df_g['Fecha_Parsed'].dt.date == hoy_dt.date()]
+                else:
+                    df_g_filtrado = df_g[df_g['Fecha_Parsed'] >= fecha_limite]
+            else:
+                df_g_filtrado = df_g.copy()
+            
+            total_gastos_periodo = df_g_filtrado['Monto'].sum()
 
-    # 3. Cálculo de Inventario y Ganancia Potencial
+    # 3. Cálculo de Inventario y Ganancia Potencial (Estructural del Negocio)
     if df_base is not None and not df_base.empty:
         df_base['Costo'] = pd.to_numeric(df_base['Costo'], errors='coerce').fillna(0)
         df_base['Precio de Venta'] = pd.to_numeric(df_base['Precio de Venta'], errors='coerce').fillna(0)
@@ -1129,16 +1174,18 @@ elif menu == "📊 Dashboard Ejecutivo":
         inversion_total = valor_venta_total = ganancia_potencial = 0.0
         total_productos = 0
 
-    utilidad_neta_estimada = total_ventas_historico - total_gastos
+    utilidad_neta_estimada = total_ventas_periodo - total_gastos_periodo
 
-    # --- BLOQUE DE KPIS SUPERIORES (Diseño Profesional) ---
+    st.divider()
+
+    # --- BLOQUE DE KPIS SUPERIORES (Dinámicos según el filtro) ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(label="💰 Venta Total Acumulada", value=f"${total_ventas_historico:,.2f}")
+        st.metric(label=f"💰 Venta ({periodo_seleccionado.split()[0]})", value=f"${total_ventas_periodo:,.2f}")
     with col2:
-        st.metric(label="📉 Gastos Operativos", value=f"${total_gastos:,.2f}", delta="Egresos", delta_color="inverse")
+        st.metric(label=f"📉 Gastos ({periodo_seleccionado.split()[0]})", value=f"${total_gastos_periodo:,.2f}", delta="Egresos", delta_color="inverse")
     with col3:
-        st.metric(label="💼 Utilidad Neta Est.", value=f"${utilidad_neta_estimada:,.2f}", delta="Margen")
+        st.metric(label=f"💼 Utilidad Est. ({periodo_seleccionado.split()[0]})", value=f"${utilidad_neta_estimada:,.2f}", delta="Margen")
     with col4:
         st.metric(label="📦 Total Productos", value=total_productos)
 
@@ -1163,33 +1210,39 @@ elif menu == "📊 Dashboard Ejecutivo":
         if os.path.exists(archivo_cuadratura):
             df_cuat = pd.read_excel(archivo_cuadratura)
             if not df_cuat.empty and 'Fecha' in df_cuat.columns and 'VentaTotal' in df_cuat.columns:
-                st.line_chart(df_cuat.set_index('Fecha')['VentaTotal'])
+                if fecha_limite is not None and periodo_seleccionado != "Histórico Completo":
+                    df_cuat['Fecha_Parsed'] = pd.to_datetime(df_cuat['Fecha'], errors='coerce')
+                    if periodo_seleccionado == "Diaria (Hoy)":
+                        df_cuat = df_cuat[df_cuat['Fecha_Parsed'].dt.date == hoy_dt.date()]
+                    else:
+                        df_cuat = df_cuat[df_cuat['Fecha_Parsed'] >= fecha_limite]
+                
+                if not df_cuat.empty:
+                    st.line_chart(df_cuat.set_index('Fecha')['VentaTotal'])
+                else:
+                    st.info("ℹ️ No hay registros de cuadratura en este período.")
             else:
-                st.info("ℹ️ No hay registros suficientes para graficar ingresos diarios.")
+                st.info("ℹ️ Sin datos de cuadratura diarios.")
         else:
-            st.info("ℹ️ Sin datos de cuadratura diarios registrados.")
+            st.info("ℹ️ Archivo de cuadratura no encontrado.")
 
     with col_g2:
         st.markdown("#### 📊 Distribución de Gastos por Categoría")
-        if os.path.exists(archivo_gastos):
-            df_gst = pd.read_excel(archivo_gastos)
-            if not df_gst.empty and 'Categoria' in df_gst.columns and 'Monto' in df_gst.columns:
-                df_cat = df_gst.groupby('Categoria')['Monto'].sum().reset_index()
-                st.bar_chart(df_cat.set_index('Categoria')['Monto'])
-            else:
-                st.info("ℹ️ No hay categorías de gastos registradas para mostrar.")
+        if not df_g_filtrado.empty and 'Categoria' in df_g_filtrado.columns and 'Monto' in df_g_filtrado.columns:
+            df_cat = df_g_filtrado.groupby('Categoria')['Monto'].sum().reset_index()
+            st.bar_chart(df_cat.set_index('Categoria')['Monto'])
         else:
-            st.info("ℹ️ Sin registros de gastos activos.")
+            st.info("ℹ️ No hay registros de gastos para el período seleccionado.")
 
     st.divider()
     st.markdown("### 🔔 Alertas y Salud Financiera del Negocio")
     
     col_a1, col_a2 = st.columns(2)
     with col_a1:
-        if total_gastos > (total_ventas_historico * 0.7) and total_ventas_historico > 0:
-            st.error("⚠️ **Alerta Financiera:** Los gastos operativos están superando el 70% de las ventas acumuladas.")
+        if total_gastos_periodo > (total_ventas_periodo * 0.7) and total_ventas_periodo > 0:
+            st.error("⚠️ **Alerta Financiera:** Los gastos operativos superan el 70% de las ventas en este período.")
         else:
-            st.success("✅ **Salud Financiera Estable:** Los niveles de gastos se mantienen controlados frente a las ventas.")
+            st.success("✅ **Salud Financiera Estable:** Niveles de gastos controlados para el período analizado.")
             
     with col_a2:
         if os.path.exists(archivo_cpp):
@@ -1201,7 +1254,7 @@ elif menu == "📊 Dashboard Ejecutivo":
                 st.info("ℹ️ No hay facturas de proveedores pendientes de pago.")
         else:
             st.info("ℹ️ Módulo de cuentas por pagar sin registros activos.")
-
+            
 # ----------------- SECCIÓN INVENTARIO GENERAL -----------------
 elif menu == "📦 Inventario y Productos":
     mostrar_encabezado_con_home("Gestión de Bases de Datos")

@@ -697,7 +697,7 @@ def mostrar_modulo_reportes_avanzados(ruta_negocio):
                 pdf.set_font("Arial", 'I', 9)
                 pdf.cell(0, 6, "Reporte generado automáticamente por ControlPRO ERP.", ln=True, align='C')
 
-                pdf_output_bytes = pdf.output(dest='S')
+                pdf_output_bytes = pdf.output(dest='S').encode('latin1')
 
                 st.success("✅ ¡Informe PDF generado con éxito!")
                 st.download_button(

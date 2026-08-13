@@ -254,20 +254,19 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     else:
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
-# --- FUNCIÓN CORREGIDA CON EL FORMULARIO DE GASTOS ARRIBA Y LA TABLA ABAJO ---
+# --- FUNCIÓN CORREGIDA CONECTADA A SUPABASE ---
 def mostrar_modulo_registro_gastos(supabase):
     st.markdown("### 📋 Registro y Control de Gastos")
     
-    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
-    if not os.path.exists(archivo_gastos):
-        pd.DataFrame(columns=['Fecha', 'Proveedor', 'Numero_Factura', 'Tipo_Pago', 'Categoria', 'Monto', 'Fecha_Hora', 'Descripcion_Gasto', 'Metodo_Pago']).to_excel(archivo_gastos, index=False)
+    # Obtenemos el RUT del cliente actual
+    rut_actual = st.session_state.get("negocio_seleccionado")
     
     # --- FORMULARIO PARA REGISTRAR NUEVO GASTO ---
     with st.form("form_nuevo_gasto"):
         st.markdown("#### ➕ Registrar Nuevo Gasto o Egreso")
         col_g1, col_g2 = st.columns(2)
         with col_g1:
-            fecha_gasto = st.date_input("Fecha del Gasto", value=date.today())
+            fecha_gasto = st.date_input("Fecha del Gasto")
             proveedor_g = st.text_input("Proveedor / Establecimiento")
             factura_g = st.text_input("Número de Factura o Boleta (Opcional)")
             categoria_g = st.selectbox("Categoría", ["Mercadería", "Gastos Operativos", "Servicios Básicos", "Logística", "Otros"])
@@ -282,32 +281,60 @@ def mostrar_modulo_registro_gastos(supabase):
             if monto_g <= 0:
                 st.warning("⚠️ Debes ingresar un monto mayor a cero.")
             else:
-                df_gastos_ant = pd.read_excel(archivo_gastos)
-                nuevo_gasto = pd.DataFrame([{
-                    'Fecha': str(fecha_gasto),
-                    'Proveedor': proveedor_g or "Sin Proveedor",
-                    'Numero_Factura': factura_g or "S/N",
-                    'Tipo_Pago': tipo_pago_g,
-                    'Categoria': categoria_g,
-                    'Monto': monto_g,
-                    'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'Descripcion_Gasto': descripcion_g,
-                    'Metodo_Pago': tipo_pago_g
-                }])
-                pd.concat([df_gastos_ant, nuevo_gasto], ignore_index=True).to_excel(archivo_gastos, index=False)
-                st.success("✅ ¡Gasto registrado con éxito!")
-                st.rerun()
+                # --- GUARDADO BLINDADO EN SUPABASE ---
+                # Unimos proveedor y descripción para guardarlo en la columna 'detalle'
+                texto_detalle = f"{proveedor_g} - {descripcion_g}" if proveedor_g else descripcion_g
+                
+                nuevo_gasto = {
+                    "rut_empresa": rut_actual,
+                    "fecha": str(fecha_gasto),
+                    "detalle": texto_detalle,
+                    "categoria": categoria_g,
+                    "metodo_pago": tipo_pago_g,
+                    "documento": factura_g or "S/N",
+                    "monto": monto_g
+                }
+                try:
+                    supabase.table("gastos").insert(nuevo_gasto).execute()
+                    st.success("✅ ¡Gasto registrado con éxito en la nube!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar en la nube: {e}")
 
     st.divider()
     st.markdown("### 📂 Historial de Gastos Registrados")
     
-    df_gastos = pd.read_excel(archivo_gastos)
-    if not df_gastos.empty:
-        st.dataframe(df_gastos, use_container_width=True)
-        total_gastos = df_gastos['Monto'].sum() if 'Monto' in df_gastos.columns else 0.0
-        st.metric(label="💰 Total Histórico de Gastos", value=f"${total_gastos:,.2f}")
-    else:
+    # --- LECTURA BLINDADA DESDE SUPABASE ---
+    try:
+        res = supabase.table("gastos").select("*").eq("rut_empresa", rut_actual).order("fecha", desc=True).execute()
+        df_gastos = pd.DataFrame(res.data)
+    except Exception as e:
+        df_gastos = pd.DataFrame()
+        st.error("Error al conectar con la base de datos.")
+
+    if df_gastos.empty:
         st.info("ℹ️ No hay registros de gastos todavía.")
+    else:
+        total_gastos = df_gastos['monto'].sum()
+        st.metric(label="💰 Total Histórico de Gastos", value=f"${total_gastos:,.2f}")
+        
+        st.divider()
+        st.markdown("Revisa el detalle de cada gasto y utiliza el botón de la derecha para **eliminar** el registro en caso de error.")
+
+        # --- DIBUJAMOS LA LISTA CON LOS BOTONES DE BASURERO ---
+        for idx, row in df_gastos.iterrows():
+            c_info, c_btn = st.columns([10, 1])
+            with c_info:
+                st.info(f"📅 **{row.get('fecha', '')}** | 📝 **{row.get('detalle', '')}** | 🏷️ {row.get('categoria', '')} | 💳 {row.get('metodo_pago', '')} | 📄 Fac/Bol: {row.get('documento', 'S/N')} | **Monto: ${float(row.get('monto', 0)):,.2f}**")
+            with c_btn:
+                # Botón de eliminar conectado al ID indestructible de Supabase
+                if st.button("🗑️", key=f"del_gasto_{row.get('id')}", help="Eliminar este registro"):
+                    try:
+                        supabase.table("gastos").delete().eq("id", row.get('id')).execute()
+                        st.success("✅ Gasto eliminado correctamente.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Error al eliminar el registro.")
 
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")

@@ -830,16 +830,22 @@ else:
 # Sincronizamos la variable global requerida por otras funciones
 st.session_state.negocio_seleccionado = negocio_seleccionado
 
-
 # --- 6. BARRA LATERAL, PERMISOS Y MENÚ ÚNICO ---
 st.sidebar.markdown(f"👤 Usuario: **{st.session_state.usuario_logueado}**")
 st.sidebar.markdown(f"🏢 Negocio: *{st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'NINGUNO'}*")
+
 if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.autenticado = False
     st.session_state.negocio_actual = None
     st.session_state.usuario_logueado = None
     st.session_state.es_admin_dev = False
     st.rerun()
+
+# --- 💳 BOTÓN DE PAGO FIJO PARA CLIENTES ---
+if not st.session_state.get("es_admin_dev", False):
+    st.sidebar.write("") # Un pequeño espacio visual
+    st.sidebar.link_button("💳 Renovar Licencia Mensual", "https://mpago.la/2aRRK8q", type="primary", use_container_width=True)
+# -------------------------------------------
 
 # --- ⚠️ SISTEMA DE ALERTAS DE VENCIMIENTO PARA EL CLIENTE ---
 if not st.session_state.get("es_admin_dev", False):
@@ -856,8 +862,9 @@ if not st.session_state.get("es_admin_dev", False):
                 fecha_exp_date = pd.to_datetime(str(fecha_exp_str)).date()
                 dias_restantes = (fecha_exp_date - hoy).days
                 
+                # Las alertas ahora solo muestran el texto (sin el botón, porque ya está fijo arriba)
                 if 0 < dias_restantes <= 5:
-                    st.sidebar.warning(f"⚠️ **Atención:** Tu licencia expira en **{dias_restantes} días**. Por favor contáctate con soporte para renovar.")
+                    st.sidebar.warning(f"⚠️ **Atención:** Tu licencia expira en **{dias_restantes} días**.")
                 elif dias_restantes == 0:
                     st.sidebar.error("🚨 **Último día:** Tu licencia expira **HOY**. Renueva para evitar cortes de servicio.")
                 elif dias_restantes < 0:

@@ -1086,6 +1086,13 @@ elif menu == "📑 Cuentas por Cobrar":
 elif menu == "📊 Dashboard Ejecutivo":
     mostrar_encabezado_con_home("⚡ Resumen Ejecutivo en Tiempo Real")
    
+    # Rutas y archivos del negocio actual
+    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
+    archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
+    archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
+    archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
+
+    # 1. Cálculo de Ventas Históricas desde el Libro de Ventas
     archivos_v = [f for f in os.listdir(ruta_negocio) if f.startswith("Libro_Ventas_") and f.endswith(".xlsx")]
     total_ventas_historico = 0.0
     if archivos_v:
@@ -1097,8 +1104,14 @@ elif menu == "📊 Dashboard Ejecutivo":
                 if col_tot:
                     total_ventas_historico += df_temp_v.drop_duplicates(subset=["TransaccionID"])[col_tot].sum()
 
-    retiro_diario = total_ventas_historico * 0.10
+    # 2. Cálculo de Gastos Totales
+    total_gastos = 0.0
+    if os.path.exists(archivo_gastos):
+        df_g = pd.read_excel(archivo_gastos)
+        if not df_g.empty and 'Monto' in df_g.columns:
+            total_gastos = df_g['Monto'].sum()
 
+    # 3. Cálculo de Inventario y Ganancia Potencial
     if df_base is not None and not df_base.empty:
         df_base['Costo'] = pd.to_numeric(df_base['Costo'], errors='coerce').fillna(0)
         df_base['Precio de Venta'] = pd.to_numeric(df_base['Precio de Venta'], errors='coerce').fillna(0)
@@ -1107,20 +1120,27 @@ elif menu == "📊 Dashboard Ejecutivo":
         inversion_total = (df_base['Costo'] * df_base['Stock']).sum()
         valor_venta_total = (df_base['Precio de Venta'] * df_base['Stock']).sum()
         ganancia_potencial = valor_venta_total - inversion_total
+        total_productos = len(df_base)
     else: 
         inversion_total = valor_venta_total = ganancia_potencial = 0.0
+        total_productos = 0
 
+    utilidad_neta_estimada = total_ventas_historico - total_gastos
+
+    # --- BLOQUE DE KPIS SUPERIORES (Diseño Profesional) ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(label="💰 Venta Total Acumulada", value=f"${total_ventas_historico:,.2f}")
     with col2:
-        st.metric(label="💵 Retiro Diario Sugerido", value=f"${retiro_diario:,.2f}")
+        st.metric(label="📉 Gastos Operativos", value=f"${total_gastos:,.2f}", delta="Egresos", delta_color="inverse")
     with col3:
-        total_productos = len(df_base) if df_base is not None else 0
-        st.metric(label="📦 Total Productos", value=total_productos)
+        st.metric(label="💼 Utilidad Neta Est.", value=f"${utilidad_neta_estimada:,.2f}", delta="Margen")
     with col4:
-        st.metric(label="🚨 Alertas de Quiebre", value="0", delta="Estable")
+        st.metric(label="📦 Total Productos", value=total_productos)
 
+    st.divider()
+
+    # --- BLOQUE DE INVENTARIO ---
     col_inv1, col_inv2, col_inv3 = st.columns(3)
     with col_inv1:
         st.metric(label="📉 Inversión Total (Costo)", value=f"${inversion_total:,.2f}")
@@ -1128,6 +1148,55 @@ elif menu == "📊 Dashboard Ejecutivo":
         st.metric(label="📈 Valor Venta Potencial", value=f"${valor_venta_total:,.2f}")
     with col_inv3:
         st.metric(label="💰 Ganancia Potencial", value=f"${ganancia_potencial:,.2f}")
+
+    st.divider()
+
+    # --- GRÁFICOS Y TENDENCIAS INTERACTIVAS ---
+    col_g1, col_g2 = st.columns(2)
+
+    with col_g1:
+        st.markdown("#### 📈 Evolución Diaria de Ingresos (Cuadratura)")
+        if os.path.exists(archivo_cuadratura):
+            df_cuat = pd.read_excel(archivo_cuadratura)
+            if not df_cuat.empty and 'Fecha' in df_cuat.columns and 'VentaTotal' in df_cuat.columns:
+                st.line_chart(df_cuat.set_index('Fecha')['VentaTotal'])
+            else:
+                st.info("ℹ️ No hay registros suficientes para graficar ingresos diarios.")
+        else:
+            st.info("ℹ️ Sin datos de cuadratura diarios registrados.")
+
+    with col_g2:
+        st.markdown("#### 📊 Distribución de Gastos por Categoría")
+        if os.path.exists(archivo_gastos):
+            df_gst = pd.read_excel(archivo_gastos)
+            if not df_gst.empty and 'Categoria' in df_gst.columns and 'Monto' in df_gst.columns:
+                df_cat = df_gst.groupby('Categoria')['Monto'].sum().reset_index()
+                st.bar_chart(df_cat.set_index('Categoria')['Monto'])
+            else:
+                st.info("ℹ️ No hay categorías de gastos registradas para mostrar.")
+        else:
+            st.info("ℹ️ Sin registros de gastos activos.")
+
+    st.divider()
+    st.markdown("### 🔔 Alertas y Salud Financiera del Negocio")
+    
+    col_a1, col_a2 = st.columns(2)
+    with col_a1:
+        if total_gastos > (total_ventas_historico * 0.7) and total_ventas_historico > 0:
+            st.error("⚠️ **Alerta Financiera:** Los gastos operativos están superando el 70% de las ventas acumuladas.")
+        else:
+            st.success("✅ **Salud Financiera Estable:** Los niveles de gastos se mantienen controlados frente a las ventas.")
+            
+    with col_a2:
+        if os.path.exists(archivo_cpp):
+            df_prov_pend = pd.read_excel(archivo_cpp)
+            pendientes = df_prov_pend[df_prov_pend.get('Estado', '') == 'PENDIENTE'] if 'Estado' in df_prov_pend.columns else pd.DataFrame()
+            if not pendientes.empty:
+                st.warning(f"⚠️ Tienes **{len(pendientes)} factura(s) pendiente(s)** de pago a proveedores.")
+            else:
+                st.info("ℹ️ No hay facturas de proveedores pendientes de pago.")
+        else:
+            st.info("ℹ️ Módulo de cuentas por pagar sin registros activos.")
 
 # ----------------- SECCIÓN INVENTARIO GENERAL -----------------
 elif menu == "📦 Inventario y Productos":

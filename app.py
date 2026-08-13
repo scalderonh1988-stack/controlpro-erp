@@ -1416,6 +1416,15 @@ elif menu == "📊 Dashboard Ejecutivo":
 
     with col_g2:
         st.markdown("#### 📊 Distribución de Gastos por Categoría")
+        with st.expander("💡 ¿Qué significa este gráfico y por qué es importante?"):
+            st.write("""
+            **¿Qué mide exactamente?** 
+            Te muestra de forma visual en qué se está yendo el dinero de tu negocio, calculando qué porcentaje del total de tus egresos corresponde a cada categoría.
+            
+            **¿Por qué es clave para tu éxito?**
+            * **Detección de fugas:** Si la categoría *Gastos Operativos* (arriendo, luz, sueldos) domina la gráfica, significa que los costos fijos de mantener tu local están muy altos.
+            * **Equilibrio sano:** Lo ideal en tu negocio es que la porción más grande de esta gráfica sea siempre la **Mercadería**, ya que esa es la inversión que te generará ventas y ganancias reales.
+            """)
         if not df_g_filtrado.empty and 'Categoria' in df_g_filtrado.columns and 'Monto' in df_g_filtrado.columns:
             # Agrupamos los datos igual que antes
             df_cat = df_g_filtrado.groupby('Categoria')['Monto'].sum().reset_index()

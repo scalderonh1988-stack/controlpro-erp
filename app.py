@@ -841,6 +841,31 @@ if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.es_admin_dev = False
     st.rerun()
 
+# --- ⚠️ SISTEMA DE ALERTAS DE VENCIMIENTO PARA EL CLIENTE ---
+if not st.session_state.get("es_admin_dev", False):
+    try:
+        rut_actual = st.session_state.get("negocio_seleccionado") 
+        
+        res_licencia = supabase.table("empresas").select("fecha_expiracion").eq("rut_empresa", rut_actual).execute()
+        
+        if res_licencia and res_licencia.data:
+            fecha_exp_str = res_licencia.data[0].get("fecha_expiracion")
+            
+            if fecha_exp_str and str(fecha_exp_str).strip() not in ["None", "NaT", "nan", ""]:
+                hoy = date.today()
+                fecha_exp_date = pd.to_datetime(str(fecha_exp_str)).date()
+                dias_restantes = (fecha_exp_date - hoy).days
+                
+                if 0 < dias_restantes <= 5:
+                    st.sidebar.warning(f"⚠️ **Atención:** Tu licencia expira en **{dias_restantes} días**. Por favor contáctate con soporte para renovar.")
+                elif dias_restantes == 0:
+                    st.sidebar.error("🚨 **Último día:** Tu licencia expira **HOY**. Renueva para evitar cortes de servicio.")
+                elif dias_restantes < 0:
+                    st.sidebar.error(f"🚫 **Licencia Expirada** hace {abs(dias_restantes)} días. Tu acceso será suspendido a la brevedad.")
+    except Exception as e:
+        pass
+# -------------------------------------------------------------
+
 st.sidebar.divider()
 
 def cargar_permisos():

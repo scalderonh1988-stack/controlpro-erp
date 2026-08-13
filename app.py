@@ -196,22 +196,15 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     
     # --- CÁLCULO AUTOMÁTICO DE DÍAS DE ATRASO ---
     if not df_cxp.empty:
-        # Buscamos si existe alguna columna relacionada con la fecha de vencimiento
         col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
         
         if col_venc:
             hoy = pd.to_datetime(date.today())
             fechas_venc = pd.to_datetime(df_cxp[col_venc], errors='coerce')
-            
-            # Restamos la fecha actual menos la fecha de vencimiento
             dias_atraso = (hoy - fechas_venc).dt.days
-            
-            # Si el resultado es menor o igual a 0 (está al día), los días de atraso son 0
             dias_atraso = dias_atraso.apply(lambda x: x if x > 0 else 0)
-            
             df_cxp["DiasAtraso"] = dias_atraso
         else:
-            # Si no encuentra la columna de fecha de vencimiento, inicializa en 0
             df_cxp["DiasAtraso"] = 0
 
     cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
@@ -250,7 +243,6 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
                         df_cxp.loc[idx, "Abono"] += monto_abono
                     st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
               
-                # Limpiamos la columna temporal antes de guardar para no duplicarla en el Excel base
                 if "DiasAtraso" in df_cxp.columns:
                     df_cxp = df_cxp.drop(columns=["DiasAtraso"])
                     
@@ -261,6 +253,7 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     else:
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
+# --- FUNCIÓN CORREGIDA CON EL FORMULARIO DE GASTOS ARRIBA Y LA TABLA ABAJO ---
 def mostrar_modulo_registro_gastos(ruta_negocio):
     st.markdown("### 📋 Registro y Control de Gastos")
     
@@ -307,7 +300,6 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
     st.divider()
     st.markdown("### 📂 Historial de Gastos Registrados")
     
-    # Cargar y mostrar la tabla actualizada
     df_gastos = pd.read_excel(archivo_gastos)
     if not df_gastos.empty:
         st.dataframe(df_gastos, use_container_width=True)
@@ -325,7 +317,6 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
    
     df_cuentas = pd.read_excel(archivo_cuentas)
    
-    # Limpiar formato de fecha para quitar el '00:00:00'
     for col_f in ['Fecha_Emision', 'Fecha_Vencimiento']:
         if col_f in df_cuentas.columns:
             df_cuentas[col_f] = pd.to_datetime(df_cuentas[col_f], errors='coerce').dt.date
@@ -438,15 +429,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.dataframe(df_cuadratura, use_container_width=True)
         else:
             st.info("ℹ️ No hay registros guardados todavía.")
-
-
-def mostrar_modulo_registro_gastos(ruta_negocio):
-    st.markdown("### 📋 Registro y Control de Gastos")
-    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
-    if not os.path.exists(archivo_gastos):
-        pd.DataFrame(columns=['Fecha_Hora', 'Descripcion_Gasto', 'Categoria', 'Metodo_Pago', 'Documento', 'Monto']).to_excel(archivo_gastos, index=False)
-    df_gastos = pd.read_excel(archivo_gastos)
-    st.dataframe(df_gastos, use_container_width=True)
 
 
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):
@@ -621,7 +603,7 @@ if not st.session_state.autenticado:
                         st.session_state.negocio_actual = negocio_asignado
                         st.session_state.usuario_logueado = usuario_input
                         st.session_state.nombre_empresa = empresa_encontrada.get("empresa_nombre")
-                        st.session_state.rol_usuario = "Administrador" # Dueño entra como Admin
+                        st.session_state.rol_usuario = "Administrador"
                         st.success(f"🏠 ¡Bienvenido Administrador! Ingresando al Home de {str(st.session_state.nombre_empresa).upper()}...")
                         st.rerun()
                     else:
@@ -637,7 +619,6 @@ if not st.session_state.autenticado:
                                         if usuario_limpio in diccionario_users:
                                             datos_usr = diccionario_users[usuario_limpio]
                                             if datos_usr.get("password") == password_limpio:
-                                                # ¡Credenciales correctas de empleado!
                                                 st.session_state.autenticado = True
                                                 st.session_state.es_admin_dev = False
                                                 st.session_state.negocio_actual = neg_folder

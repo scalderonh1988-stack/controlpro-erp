@@ -178,7 +178,7 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
     pdf.cell(140, 8, "TOTAL GENERAL:", border=1, align='R')
     pdf.cell(35, 8, f"${total_general:,.0f}", border=1, align='R', ln=True)
    
-    return pdf.output(dest='S')
+    return pdf.output(dest='S').encode('latin1')
 
 def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     if st.button("⬅️ Volver al Home", use_container_width=True):

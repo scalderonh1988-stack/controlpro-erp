@@ -938,27 +938,28 @@ if st.session_state.es_admin_dev:
             negocio_a_limpiar = st.selectbox("Selecciona Negocio a Gestionar:", negocios_disponibles, key="limpiar_negocio_sel_nico")
             dir_cliente_objetivo = os.path.join(CLIENTES_DIR, negocio_a_limpiar)
 
-            if st.button("🗑️ Vaciar Libros de Ventas", key="btn_vaciar_ventas_dev"):
-                try:
-                    archivos_v = [f for f in os.listdir(dir_cliente_objetivo) if f.startswith("Libro_Ventas_")]
-                    for ar in archivos_v:
-                        os.remove(os.path.join(dir_cliente_objetivo, ar))
-                    st.success(f"✅ ¡Libros de ventas de '{negocio_a_limpiar}' eliminados/reiniciados!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al limpiar ventas: {e}")
+            st.warning("⚠️ **Zona de Peligro:** La opción de fábrica eliminará todos los registros de ventas, gastos, inventario y documentos de este negocio.")
 
-            if st.button("🗑️ Limpiar Archivador de Documentos", key="btn_limpiar_archivador_dev"):
+            if st.button("🚨 Restablecer a Versión de Fábrica (Borrar Todo)", type="primary", key="btn_version_fabrica"):
                 try:
                     import shutil
-                    dir_archivador = os.path.join(dir_cliente_objetivo, "archivador_ventas")
-                    if os.path.exists(dir_archivador):
-                        shutil.rmtree(dir_archivador)
-                    st.success(f"✅ ¡Archivador de documentos de '{negocio_a_limpiar}' limpiado!")
+                    # 1. Eliminar todos los archivos de Excel y configuraciones de prueba del cliente
+                    for archivo in os.listdir(dir_cliente_objetivo):
+                        ruta_archivo = os.path.join(dir_cliente_objetivo, archivo)
+                        if os.path.isfile(ruta_archivo) and archivo != "logo_empresa.png":
+                            os.remove(ruta_archivo)
+                    
+                    # 2. Eliminar las carpetas de archivadores de documentos
+                    for carpeta_sub in ["archivador_ventas", "archivador_compras"]:
+                        dir_sub = os.path.join(dir_cliente_objetivo, carpeta_sub)
+                        if os.path.exists(dir_sub):
+                            shutil.rmtree(dir_sub)
+
+                    st.success(f"✨ ¡Negocio '{negocio_a_limpiar}' restablecido a versión de fábrica con éxito!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error al limpiar archivador: {e}")
-                    
+                    st.error(f"❌ Ocurrió un error al restablecer: {e}")
+
         with tab_crear:
             with st.form("form_crear_cliente_dev"):
                 id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")

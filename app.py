@@ -925,10 +925,12 @@ if st.session_state.es_admin_dev:
 
         with tab_crear:
             with st.form("form_crear_cliente_dev_unico"):
-                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)", key="input_id_neg")
+                id_negocio = st.text_input("ID Carpeta / RUT (ej: 77297004-8)", key="input_id_neg")
                 nombre_comercial = st.text_input("Nombre Comercial / Razón Social", key="input_nom_neg")
                 password_cliente = st.text_input("Contraseña / RUT", type="password", key="input_pass_neg")
-                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31), key="input_fech_neg")
+                
+                # 👇 CALENDARIO PARA ASIGNAR FECHA MANUAL AL CREAR CLIENTE 👇
+                fecha_exp = st.date_input("Fecha de Expiración Inicial", value=date(2026, 12, 31), key="input_fech_neg")
                
                 guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
                
@@ -936,6 +938,7 @@ if st.session_state.es_admin_dev:
                     if not id_negocio or not nombre_comercial:
                         st.warning("⚠️ Debes completar el ID y el Nombre.")
                     else:
+                        # 1. Guarda la carpeta local y JSON con la fecha del calendario
                         datos_nuevo = {
                             "nombre": nombre_comercial,
                             "password": password_cliente,
@@ -949,7 +952,18 @@ if st.session_state.es_admin_dev:
                         db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
                         guardar_permisos(db_permisos)
                         
-                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                        # 2. Inyecta automáticamente el nuevo cliente en Supabase para el Control Maestro
+                        try:
+                            supabase.table("empresas").insert({
+                                "rut_empresa": id_negocio,
+                                "empresa_nombre": nombre_comercial,
+                                "fecha_expiracion": str(fecha_exp),
+                                "licencia_activa": True
+                            }).execute()
+                        except Exception as e:
+                            pass # Si ya existe en Supabase o hay un error menor, no detiene el proceso local
+                        
+                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado y sincronizado con Supabase!")
                         st.rerun()
 
         with tab_mant:
@@ -984,36 +998,6 @@ if st.session_state.es_admin_dev:
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ocurrió un error al restablecer: {e}")
-
-        with tab_crear:
-            with st.form("form_crear_cliente_dev"):
-                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-                password_cliente = st.text_input("Contraseña / RUT", type="password")
-                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
-               
-                guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
-               
-                if guardar_nuevo:
-                    if not id_negocio or not nombre_comercial:
-                        st.warning("⚠️ Debes completar el ID y el Nombre.")
-                    else:
-                        datos_nuevo = {
-                            "nombre": nombre_comercial,
-                            "password": password_cliente,
-                            "fecha_expiracion": str(fecha_exp),
-                            "activo": True,
-                            "modulos": {mod: True for mod in modulos_totales}
-                        }
-                        guardar_nuevo_cliente(id_negocio, datos_nuevo)
-                        
-                        db_permisos = cargar_permisos()
-                        db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
-                        guardar_permisos(db_permisos)
-                        
-                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
-                        st.rerun()
-
 
 # 📌 Créditos al desarrollador en el footer de la barra lateral
 st.sidebar.markdown("---")

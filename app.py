@@ -2710,6 +2710,10 @@ elif menu == "📒 Cuadratura Diaria":
 elif menu == "🏦 Conciliación y Retiros Seguros": 
     mostrar_modulo_conciliacion_retiros(ruta_negocio)
 
+# Dentro de tu menú de navegación lateral, agrega esta línea:
+elif menu == "📈 Reportes y Analítica":
+    mostrar_modulo_reportes_avanzados(negocio_seleccionado)
+
 
 
 

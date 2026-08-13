@@ -1825,37 +1825,40 @@ elif menu == "⚠️ Control y Gestión de Inventario":
         else:
             st.error("⚠️ Falta la base de datos.")
 
-    with sub_tab3:
-        st.markdown(f"### 🛑 Control de Capital Inmovilizado y Exceso de Stock (> {limite_sobrestock_semanas} semanas)")
-        if df_base is not None:
-            col_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower() or 'existencia' in str(c).lower()), None)
-            col_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower()), 'Descripción')
-            col_cod = next((c for c in df_base.columns if 'código' in str(c).lower() or 'codigo' in str(c).lower()), df_base.columns[0])
+    with tab3:
+        st.markdown("### 🖨️ Datos del Comprobante e Impresión")
+        # [Aquí va tu formulario de configuración de ticket existente...]
 
-            if col_stock:
-                excesos = []
-                demanda_semanal = consumo_diario_estimado * 7.0
-
-                for idx, row in df_base.iterrows():
-                    stock = float(row.get(col_stock, 0)) if pd.notna(row.get(col_stock)) else 0.0
-                    semanas_stock = (stock / demanda_semanal) if demanda_semanal > 0 else 0.0
+        st.markdown("---")
+        st.markdown("### 🖼️ Logotipo de la Empresa")
+        
+        # Validar que exista un negocio seleccionado válido
+        if negocio_seleccionado and negocio_seleccionado != "admin_general":
+            tenant_dir_logo = os.path.join(CARPETA_CLIENTES, str(negocio_seleccionado))
+            ruta_logo_final = os.path.join(tenant_dir_logo, "logo_empresa.png")
+            
+            if os.path.exists(ruta_logo_final):
+                st.image(ruta_logo_final, width=120, caption="Logotipo actual guardado")
+       
+            logo_cargado = st.file_uploader("Sube una imagen para tu logo (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_logo_empresa")
+            
+            if logo_cargado is not None:
+                try:
+                    # Asegurar que la carpeta del cliente exista físicamente
+                    os.makedirs(tenant_dir_logo, exist_ok=True)
                     
-                    if semanas_stock > limite_sobrestock_semanas:
-                        excesos.append({
-                            'Código': str(row.get(col_cod, '')),
-                            'Descripción': str(row.get(col_desc, '')),
-                            'Stock Actual': stock,
-                            'Semanas de Stock': round(semanas_stock, 1)
-                        })
-                if excesos:
-                    st.warning(f"💡 {len(excesos)} productos con sobrestock detectados.")
-                    st.dataframe(pd.DataFrame(excesos), use_container_width=True)
-                else:
-                    st.success("✔️ Inventario optimizado. Sin capital inmovilizado.")
-            else:
-                st.warning("⚠️ Falta la columna de stock.")
+                    img = Image.open(logo_cargado)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    
+                    # Guardar la imagen procesada
+                    img.save(ruta_logo_final, "PNG")
+                    st.success("✅ ¡Logotipo procesado y actualizado con éxito!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Ocurrió un error al guardar el logotipo: {e}")
         else:
-            st.error("⚠️ Falta la base de datos.")
+            st.warning("⚠️ Selecciona un negocio específico desde el panel para poder cambiar su logotipo.")
 
 # ----------------- SECCIÓN COMPRAS Y RECEPCIONES (GRC / GRI) -----------------
 elif menu == "🛒 Registrar Compra (CPP)":

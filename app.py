@@ -1049,6 +1049,9 @@ if "formas_pago_erp" not in st.session_state:
 # Obtener módulos permitidos combinando licencias y perfiles
 rol_actual = st.session_state.get('rol_usuario', 'Administrador')
 lista_modulos_permitidos = obtener_modulos_permitidos(negocio_seleccionado, rol_actual, st.session_state.es_admin_dev)
+# 🛡️ Forzar acceso exclusivo al Admin saltando los filtros de permisos
+if st.session_state.get("es_admin_dev", False) and "🔑 Control Maestro de Licencias" not in lista_modulos_permitidos:
+    lista_modulos_permitidos.append("🔑 Control Maestro de Licencias")
 
 if not lista_modulos_permitidos:
     lista_modulos_permitidos = ["🏠 Home / Bienvenida"]

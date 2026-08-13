@@ -5,6 +5,7 @@ import json
 from datetime import datetime, date
 import streamlit.components.v1 as components
 import sys
+import plotly.express as px
 from data_manager import guardar_nuevo_cliente, cargar_maestro_clientes
 from calendario_pagos import mostrar_modulo_calendario_pagos
 from compras_cpp import mostrar_modulo_compras
@@ -1416,8 +1417,36 @@ elif menu == "📊 Dashboard Ejecutivo":
     with col_g2:
         st.markdown("#### 📊 Distribución de Gastos por Categoría")
         if not df_g_filtrado.empty and 'Categoria' in df_g_filtrado.columns and 'Monto' in df_g_filtrado.columns:
+            # Agrupamos los datos igual que antes
             df_cat = df_g_filtrado.groupby('Categoria')['Monto'].sum().reset_index()
-            st.bar_chart(df_cat.set_index('Categoria')['Monto'])
+            
+            # --- NUEVO GRÁFICO DE DONA CON PLOTLY ---
+            fig_dona = px.pie(
+                df_cat, 
+                values='Monto', 
+                names='Categoria', 
+                hole=0.65, # Grosor de la dona
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            
+            # Diseño moderno y tooltip interactivo
+            fig_dona.update_traces(
+                textposition='inside', 
+                textinfo='percent', 
+                hovertemplate="<b>%{label}</b><br>Gasto: $%{value:,.0f}<br>Porcentaje: %{percent}<extra></extra>"
+            )
+            
+            fig_dona.update_layout(
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+                margin=dict(t=10, b=10, l=0, r=0),
+                paper_bgcolor="rgba(0,0,0,0)", # Fondo transparente para que combine con tu tema
+                plot_bgcolor="rgba(0,0,0,0)"
+            )
+            
+            # Renderizamos el nuevo gráfico
+            st.plotly_chart(fig_dona, use_container_width=True)
+            # ----------------------------------------
         else:
             st.info("ℹ️ No hay registros de gastos para el período seleccionado.")
 

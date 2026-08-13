@@ -887,16 +887,16 @@ if st.session_state.es_admin_dev:
         tab_lic, tab_crear, tab_mant = st.tabs(["⚙️ Licencias", "➕ Crear Negocio", "🧹 Mantenimiento"])
         
         with tab_lic:
-            negocio_a_modificar = st.selectbox("Selecciona Negocio:", negocios_disponibles, key="sel_dev_negocio")
+            negocio_a_modificar = st.selectbox("Selecciona Negocio:", negocios_disponibles, key="sel_dev_negocio_nico")
             db_permisos = cargar_permisos()
             if negocio_a_modificar not in db_permisos:
                 db_permisos[negocio_a_modificar] = {mod: True for mod in modulos_totales}
            
-            with st.form(f"form_licencia_{negocio_a_modificar}"):
+            with st.form(f"form_licencia_dev_{negocio_a_modificar}"):
                 permisos_temporales = {}
                 for mod in modulos_totales:
                     estado_actual = db_permisos[negocio_a_modificar].get(mod, True)
-                    permisos_temporales[mod] = st.checkbox(mod, value=estado_actual, key=f"chk_{negocio_a_modificar}_{mod}")
+                    permisos_temporales[mod] = st.checkbox(mod, value=estado_actual, key=f"chk_dev_{negocio_a_modificar}_{mod}")
                
                 if st.form_submit_button("💾 Guardar Licencia"):
                     db_permisos[negocio_a_modificar] = permisos_temporales
@@ -905,11 +905,11 @@ if st.session_state.es_admin_dev:
                     st.rerun()
 
         with tab_crear:
-            with st.form("form_crear_cliente_dev"):
-                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
-                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
-                password_cliente = st.text_input("Contraseña / RUT", type="password")
-                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+            with st.form("form_crear_cliente_dev_unico"):
+                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)", key="input_id_neg")
+                nombre_comercial = st.text_input("Nombre Comercial / Razón Social", key="input_nom_neg")
+                password_cliente = st.text_input("Contraseña / RUT", type="password", key="input_pass_neg")
+                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31), key="input_fech_neg")
                
                 guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
                
@@ -935,10 +935,10 @@ if st.session_state.es_admin_dev:
 
         with tab_mant:
             st.markdown("#### 🧹 Reseteo y Limpieza Remota")
-            negocio_a_limpiar = st.selectbox("Selecciona Negocio a Gestionar:", negocios_disponibles, key="limpiar_negocio_sel")
+            negocio_a_limpiar = st.selectbox("Selecciona Negocio a Gestionar:", negocios_disponibles, key="limpiar_negocio_sel_nico")
             dir_cliente_objetivo = os.path.join(CLIENTES_DIR, negocio_a_limpiar)
 
-            if st.button("🗑️ Vaciar Libros de Ventas"):
+            if st.button("🗑️ Vaciar Libros de Ventas", key="btn_vaciar_ventas_dev"):
                 try:
                     archivos_v = [f for f in os.listdir(dir_cliente_objetivo) if f.startswith("Libro_Ventas_")]
                     for ar in archivos_v:
@@ -948,7 +948,7 @@ if st.session_state.es_admin_dev:
                 except Exception as e:
                     st.error(f"❌ Error al limpiar ventas: {e}")
 
-            if st.button("🗑️ Limpiar Archivador de Documentos"):
+            if st.button("🗑️ Limpiar Archivador de Documentos", key="btn_limpiar_archivador_dev"):
                 try:
                     import shutil
                     dir_archivador = os.path.join(dir_cliente_objetivo, "archivador_ventas")
@@ -958,6 +958,7 @@ if st.session_state.es_admin_dev:
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al limpiar archivador: {e}")
+                    
         with tab_crear:
             with st.form("form_crear_cliente_dev"):
                 id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")

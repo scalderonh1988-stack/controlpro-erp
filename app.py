@@ -383,12 +383,13 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
 
         st.divider()
         
-        # 🔘 Botón / Interruptor para activar o desactivar el bloque de cigarrillos / productos exentos
+        # 🔘 Interruptor para mostrar u ocultar el bloque de cigarrillos
         aplicar_cigarros = st.toggle("🚬 ¿Aplicar control diferenciado para Cigarrillos / Exentos en este cierre?", value=True)
         
         cigarrillos_c = 0.0
         markup_cigarros = 0.0
 
+        # Si está encendido, mostramos dinámicamente el bloque en pantalla
         if aplicar_cigarros:
             st.markdown("#### 🚬 Control Específico de Cigarrillos")
             col_cig1, col_cig2 = st.columns(2)
@@ -397,11 +398,10 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             with col_cig2:
                 markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
 
-        # Cálculos separados o generales
+        # Cálculos de totales y fondos intocables
         ventas_generales = efectivo_c + transferencia_c + debito_c + otros_ingresos_c
         venta_total_calculada = ventas_generales + cigarrillos_c
 
-        # Fondo de reposición diferenciado
         costo_general = ventas_generales / (1.0 + (markup_general / 100.0))
         
         if aplicar_cigarros and cigarrillos_c > 0:
@@ -437,7 +437,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                     'Efectivo': efectivo_c,
                     'Transferencia': transferencia_c,
                     'Debito': debito_c,
-                    'Cigarros': cigarrillos_c,
+                    'Cigarros': cigarrillos_c if aplicar_cigarros else 0.0,
                     'Otros_Ingresos': otros_ingresos_c,
                     'VentaTotal': venta_total_calculada,
                     'MarkupGeneral': markup_general,
@@ -458,7 +458,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.dataframe(df_cuadratura, use_container_width=True)
         else:
             st.info("ℹ️ No hay registros guardados todavía.")
-
 
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):
     if "mostrar_encabezado_con_home" in globals():

@@ -882,9 +882,9 @@ def obtener_modulos_permitidos(negocio_id, rol_usuario, es_dev):
     return modulos_finales
 
 if st.session_state.es_admin_dev:
-    with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias)"):
+    with st.sidebar.expander("🛠️ Panel de Desarrollador (Licencias y Mantenimiento)"):
         st.success("✔️ Modo Desarrollador Activo")
-        tab_lic, tab_crear = st.tabs(["⚙️ Licencias", "➕ Crear Negocio"])
+        tab_lic, tab_crear, tab_mant = st.tabs(["⚙️ Licencias", "➕ Crear Negocio", "🧹 Mantenimiento"])
         
         with tab_lic:
             negocio_a_modificar = st.selectbox("Selecciona Negocio:", negocios_disponibles, key="sel_dev_negocio")
@@ -904,6 +904,60 @@ if st.session_state.es_admin_dev:
                     st.success("✅ ¡Licencia actualizada!")
                     st.rerun()
 
+        with tab_crear:
+            with st.form("form_crear_cliente_dev"):
+                id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")
+                nombre_comercial = st.text_input("Nombre Comercial / Razón Social")
+                password_cliente = st.text_input("Contraseña / RUT", type="password")
+                fecha_exp = st.date_input("Fecha de Expiración", value=date(2026, 12, 31))
+               
+                guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
+               
+                if guardar_nuevo:
+                    if not id_negocio or not nombre_comercial:
+                        st.warning("⚠️ Debes completar el ID y el Nombre.")
+                    else:
+                        datos_nuevo = {
+                            "nombre": nombre_comercial,
+                            "password": password_cliente,
+                            "fecha_expiracion": str(fecha_exp),
+                            "activo": True,
+                            "modulos": {mod: True for mod in modulos_totales}
+                        }
+                        guardar_nuevo_cliente(id_negocio, datos_nuevo)
+                        
+                        db_permisos = cargar_permisos()
+                        db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
+                        guardar_permisos(db_permisos)
+                        
+                        st.success(f"✨ ¡Negocio '{nombre_comercial}' creado con éxito!")
+                        st.rerun()
+
+        with tab_mant:
+            st.markdown("#### 🧹 Reseteo y Limpieza Remota")
+            negocio_a_limpiar = st.selectbox("Selecciona Negocio a Gestionar:", negocios_disponibles, key="limpiar_negocio_sel")
+            dir_cliente_objetivo = os.path.join(CLIENTES_DIR, negocio_a_limpiar)
+
+            if st.button("🗑️ Vaciar Libros de Ventas"):
+                try:
+                    archivos_v = [f for f in os.listdir(dir_cliente_objetivo) if f.startswith("Libro_Ventas_")]
+                    for ar in archivos_v:
+                        os.remove(os.path.join(dir_cliente_objetivo, ar))
+                    st.success(f"✅ ¡Libros de ventas de '{negocio_a_limpiar}' eliminados/reiniciados!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al limpiar ventas: {e}")
+
+            if st.button("🗑️ Limpiar Archivador de Documentos"):
+                try:
+                    import shutil
+                    dir_archivador = os.path.join(dir_cliente_objetivo, "archivador_ventas")
+                    if os.path.exists(dir_archivador):
+                        shutil.rmtree(dir_archivador)
+                    st.success(f"✅ ¡Archivador de documentos de '{negocio_a_limpiar}' limpiado!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al limpiar archivador: {e}")
         with tab_crear:
             with st.form("form_crear_cliente_dev"):
                 id_negocio = st.text_input("ID Carpeta (ej: negocio_2, sin espacios)")

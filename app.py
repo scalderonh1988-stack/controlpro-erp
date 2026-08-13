@@ -1096,9 +1096,10 @@ def mostrar_encabezado_con_home(titulo_modulo):
 if menu == "🏠 Home / Bienvenida":
     st.markdown(f"<p class='main-title'>🪙 ControlPRO ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Selecciona un módulo para comenzar:</p>", unsafe_allow_html=True)
+   
     # 🚀 BOTÓN FORZADO EXCLUSIVO PARA EL DESARROLLADOR
     if st.session_state.get("es_admin_dev", False):
-        st.error("🛠️ *PANEL DE CONTROL MAESTRO*")
+        st.error("🛠️ **PANEL DE CONTROL MAESTRO**")
         if st.button("🔑 ABRIR CONTROL DE LICENCIAS Y CLIENTES", type="primary", use_container_width=True):
             st.session_state.menu_seleccionado = "🔑 Control Maestro de Licencias"
             st.rerun()

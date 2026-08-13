@@ -593,7 +593,7 @@ def mostrar_modulo_reportes_avanzados(ruta_negocio):
     archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
 
-    tab_r1, tab_r2, tab_r3 = st.tabs(["💰 Balance de Utilidades", "📈 Análisis de Gastos", "📑 Estado de Cartera y Vencimientos"])
+    tab_r1, tab_r2, tab_r3, tab_r4 = st.tabs(["💰 Balance de Utilidades", "📈 Análisis de Gastos", "📑 Estado de Cartera", "📄 Exportar Informes PDF"])
 
     with tab_r1:
         st.markdown("#### 💵 Resumen General de Ingresos vs. Gastos Operativos")
@@ -658,6 +658,57 @@ def mostrar_modulo_reportes_avanzados(ruta_negocio):
                 st.info("ℹ️ No hay registros en Cuentas por Pagar.")
         else:
             st.info("ℹ️ No existe archivo de Cuentas por Pagar.")
+
+    with tab_r4:
+        st.markdown("#### 📄 Generación y Descarga de Informe Ejecutivo en PDF")
+        st.info("ℹ️ Crea un reporte formal consolidado con el resumen financiero, ingresos y gastos de tu negocio listo para descargar.")
+
+        if st.button("🖨️ Generar Reporte Ejecutivo PDF", type="primary"):
+            try:
+                pdf = FPDF(orientation='P', unit='mm', format='Letter')
+                pdf.add_page()
+                
+                # Encabezado del PDF
+                nombre_empresa_act = st.session_state.get('nombre_empresa', 'BOTILLERIA SAPIRON')
+                pdf.set_font("Arial", 'B', 14)
+                pdf.cell(0, 8, str(nombre_empresa_act), ln=True, align='C')
+                pdf.set_font("Arial", '', 10)
+                pdf.cell(0, 6, "INFORME EJECUTIVO DE GESTIÓN Y FINANZAS", ln=True, align='C')
+                pdf.cell(0, 6, f"Fecha de Emisión: {date.today().strftime('%d/%m/%Y')}", ln=True, align='C')
+                pdf.ln(10)
+
+                # Resumen de cifras
+                pdf.set_font("Arial", 'B', 11)
+                pdf.cell(0, 8, "RESUMEN FINANCIERO", ln=True)
+                pdf.set_font("Arial", '', 10)
+                
+                total_ing = total_ingresos_dia if 'total_ingresos_dia' in locals() else 0.0
+                total_egr = total_egresos_gastos if 'total_egresos_gastos' in locals() else 0.0
+                utilidad_rep = total_ing - total_egr
+
+                pdf.cell(100, 7, "Ingresos Totales Registrados:", border=1)
+                pdf.cell(90, 7, f"${total_ing:,.2f}", border=1, ln=True, align='R')
+                pdf.cell(100, 7, "Gastos Operativos Totales:", border=1)
+                pdf.cell(90, 7, f"${total_egr:,.2f}", border=1, ln=True, align='R')
+                pdf.cell(100, 7, "Margen Neto Operativo Estimado:", border=1)
+                pdf.cell(90, 7, f"${utilidad_rep:,.2f}", border=1, ln=True, align='R')
+                pdf.ln(10)
+
+                pdf.set_font("Arial", 'I', 9)
+                pdf.cell(0, 6, "Reporte generado automáticamente por ControlPRO ERP.", ln=True, align='C')
+
+                pdf_output_bytes = pdf.output(dest='S')
+
+                st.success("✅ ¡Informe PDF generado con éxito!")
+                st.download_button(
+                    label="⬇️ Descargar Informe PDF",
+                    data=bytes(pdf_output_bytes),
+                    file_name=f"Informe_Financiero_{date.today()}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"❌ Error al generar el PDF: {e}")
 
 
 # --- 4. SISTEMA DE AUTENTICACIÓN INTELIGENTE UNIFICADO ---

@@ -2,24 +2,35 @@ import pandas as pd
 import openpyxl
 import os
 from datetime import datetime
+from supabase import create_client, Client
+
+# --- CONFIGURACIÓN DE LA NUBE (SUPABASE) ---
+# ⚠️ Copia tu URL y KEY exactamente como las tienes en app.py
+SUPABASE_URL = "https://dmkjlcjrobszhwasrofc.supabase.co"
+SUPABASE_KEY = "sb_publishable_uGVmMWz7T9aShxTMm_Vrgw_QFvRyTmH"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 print("🛒 Iniciando Terminal de Caja y Ventas con Escáner...")
 
+# --- SEGURIDAD: SOLICITAMOS EL RUT AL INICIAR EL TURNO ---
+print("\n🔒 Control de Seguridad")
+RUT_NEGOCIO = input("🔑 Ingresa el RUT de este local (ej: 12345678-9) para iniciar turno: ").strip()
+
+if not RUT_NEGOCIO:
+    print("❌ Error: Debes ingresar un RUT válido para operar la caja.")
+    exit()
+
 archivo_base = "BASE DE DATOS.xlsx"
-archivo_ventas_diarias = "Ventas_Diarias.xlsx"
 
 if not os.path.exists(archivo_base):
     print(f"❌ Error crítico: No se encuentra el archivo maestro '{archivo_base}'.")
 else:
-    # 1. Cargamos el libro maestro con openpyxl para proteger formato y códigos
+    # Cargamos el libro maestro local
     wb = openpyxl.load_workbook(archivo_base)
     ws = wb.active
-
-    # 2. Leemos la base con pandas para buscar productos velozmente
     df_base = pd.read_excel(archivo_base, dtype={'Código': str})
     headers = [cell.value for cell in ws[1]]
 
-    # Identificamos columnas clave
     col_stock = next((col for col in df_base.columns if 'stock' in col.lower() or 'dispo' in col.lower() or 'cantidad' in col.lower()), None)
     col_precio = next((col for col in df_base.columns if 'precio' in col.lower() or 'venta' in col.lower()), None)
 
@@ -29,7 +40,7 @@ else:
         idx_stock_ws = headers.index(col_stock) + 1
         
         print("\n---------------------------------------------------------")
-        print("🟢 CAJA ABIERTA Y LISTA PARA ESCANEAR PRODUCTOS")
+        print(f"🟢 CAJA ABIERTA - LOCAL: {RUT_NEGOCIO}")
         print("---------------------------------------------------------")
         print("Instrucciones: Ingresa el código de barras del producto (o escribe 'salir' para cerrar caja).")
 
@@ -44,7 +55,6 @@ else:
             if not codigo_ingresado:
                 continue
 
-            # Buscamos el producto en el DataFrame
             match = df_base[df_base['Código'].astype(str).str.strip() == codigo_ingresado]
 
             if match.empty:
@@ -69,47 +79,47 @@ else:
                 except ValueError:
                     cantidad_comprada = 1
 
-                # Actualizamos el stock en la memoria de pandas y en la hoja openpyxl
                 nuevo_stock = stock_actual - cantidad_comprada
                 df_base.loc[row_index_df, col_stock] = nuevo_stock
 
-                # Buscamos la fila exacta en la hoja de Excel para actualizarla visualmente
-                row_ws_idx = row_index_df + 2 # +2 por el encabezado y base 1 de Excel
+                row_ws_idx = row_index_df + 2 
                 ws.cell(row=row_ws_idx, column=idx_stock_ws, value=nuevo_stock)
 
                 total_linea = precio_venta * cantidad_comprada
+                
+                # --- PREPARAMOS EL DATO PARA LA NUBE ---
                 carrito.append({
-                    'Fecha': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'Código': codigo_ingresado,
-                    'Cantidad_Vendida': cantidad_comprada,
-                    'Total_Venta': total_linea
+                    "rut_empresa": RUT_NEGOCIO,
+                    "fecha": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "detalle": f"{descripcion} (Cant: {cantidad_comprada})",
+                    "monto": total_linea,
+                    "metodo_pago": "Efectivo",
+                    "documento": "Ticket de Venta"
                 })
 
                 print(f"✅ Agregado al ticket. Subtotal línea: ${total_linea:,.2f} | Nuevo Stock: {nuevo_stock}")
 
-        # Al cerrar caja, guardamos los cambios en el maestro y registramos las ventas del día
+        # Al cerrar caja
         if carrito:
-            # Blindamos estrictamente la columna A (Códigos) con formato de texto '@'
             for cell in ws['A']:
                 if cell.row > 1:
                     cell.number_format = '@'
                     cell.data_type = 's'
+            wb.save(archivo_base) 
 
-            wb.save(archivo_base)
-
-            # Guardamos o acumulamos en el archivo de ventas diarias
-            df_nuevas_ventas = pd.DataFrame(carrito)
-            if os.path.exists(archivo_ventas_diarias):
-                df_ventas_antiguas = pd.read_excel(archivo_ventas_diarias, dtype={'Código': str})
-                df_ventas_final = pd.concat([df_ventas_antiguas, df_nuevas_ventas], ignore_index=True)
-            else:
-                df_ventas_final = df_nuevas_ventas
-
-            df_ventas_final.to_excel(archivo_ventas_diarias, index=False)
+            print("\n⏳ Subiendo ventas a la nube (Supabase)...")
+            try:
+                supabase.table("ventas").insert(carrito).execute()
+                print("✅ ¡Ventas registradas con éxito en la nube!")
+            except Exception as e:
+                print(f"❌ Error al conectar con la nube: {e}")
+                df_respaldo = pd.DataFrame(carrito)
+                df_respaldo.to_excel("Respaldo_Ventas_Emergencia.xlsx", index=False)
+                print("⚠️ Falló el internet. Las ventas se guardaron localmente en 'Respaldo_Ventas_Emergencia.xlsx'.")
 
             print("\n---------------------------------------------------------")
             print("🏁 CAJA CERRADA CON ÉXITO")
-            print(f"📁 Stock actualizado en '{archivo_base}' y ventas registradas en '{archivo_ventas_diarias}'.")
+            print(f"📁 Stock local actualizado en '{archivo_base}'.")
             print("---------------------------------------------------------")
         else:
             print("\nℹ️ No se registraron ventas en esta sesión de caja.")

@@ -351,7 +351,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     
     st.markdown("""
         <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
-            <strong>📌 Control de Caja Inteligente:</strong> Ingresa tus ingresos operacionales y configura de forma separada el bloque de cigarrillos con su propio margen de ganancia.
+            <strong>📌 Control de Caja Inteligente:</strong> Gestiona tus ingresos generales y activa el interruptor si necesitas separar productos con margen diferenciado (como cigarrillos).
         </div>
     """, unsafe_allow_html=True)
 
@@ -382,21 +382,32 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 
         st.divider()
-        # 📌 Bloque separado y ordenado al lado para Cigarrillos y su Markup
-        st.markdown("#### 🚬 Control Específico de Cigarrillos")
-        col_cig1, col_cig2 = st.columns(2)
-        with col_cig1:
-            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
-        with col_cig2:
-            markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+        
+        # 🔘 Botón / Interruptor para activar o desactivar el bloque de cigarrillos / productos exentos
+        aplicar_cigarros = st.toggle("🚬 ¿Aplicar control diferenciado para Cigarrillos / Exentos en este cierre?", value=True)
+        
+        cigarrillos_c = 0.0
+        markup_cigarros = 0.0
 
-        # Cálculos separados
+        if aplicar_cigarros:
+            st.markdown("#### 🚬 Control Específico de Cigarrillos")
+            col_cig1, col_cig2 = st.columns(2)
+            with col_cig1:
+                cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
+            with col_cig2:
+                markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+
+        # Cálculos separados o generales
         ventas_generales = efectivo_c + transferencia_c + debito_c + otros_ingresos_c
         venta_total_calculada = ventas_generales + cigarrillos_c
 
         # Fondo de reposición diferenciado
         costo_general = ventas_generales / (1.0 + (markup_general / 100.0))
-        costo_cigarros = cigarrillos_c / (1.0 + (markup_cigarros / 100.0))
+        
+        if aplicar_cigarros and cigarrillos_c > 0:
+            costo_cigarros = cigarrillos_c / (1.0 + (markup_cigarros / 100.0))
+        else:
+            costo_cigarros = 0.0
         
         costo_reposicion_total = costo_general + costo_cigarros
         utilidad_neta_disponible = venta_total_calculada - costo_reposicion_total
@@ -430,7 +441,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                     'Otros_Ingresos': otros_ingresos_c,
                     'VentaTotal': venta_total_calculada,
                     'MarkupGeneral': markup_general,
-                    'MarkupCigarros': markup_cigarros,
+                    'MarkupCigarros': markup_cigarros if aplicar_cigarros else 0.0,
                     'CostoReposicion': costo_reposicion_total,
                     'UtilidadRetirable': utilidad_neta_disponible,
                     'Observaciones': observaciones_c

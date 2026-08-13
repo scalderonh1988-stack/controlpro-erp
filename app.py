@@ -255,7 +255,7 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
 # --- FUNCIÓN CORREGIDA CON EL FORMULARIO DE GASTOS ARRIBA Y LA TABLA ABAJO ---
-def mostrar_modulo_registro_gastos(ruta_negocio):
+def mostrar_modulo_registro_gastos(supabase):
     st.markdown("### 📋 Registro y Control de Gastos")
     
     archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
@@ -1265,7 +1265,7 @@ elif menu == "📊 Módulo de Finanzas":
     with tab_fin2:
         mostrar_modulo_calendario_pagos(ruta_negocio)
     with tab_fin3:
-        mostrar_modulo_registro_gastos(ruta_negocio)
+        mostrar_modulo_registro_gastos(supabase)
 
 elif menu == "📒 Cuadratura Diaria":
     mostrar_encabezado_con_home("📒 Cuadratura Diaria")
@@ -1806,7 +1806,7 @@ elif menu == "📊 Módulo de Finanzas":
         mostrar_modulo_calendario_pagos(ruta_negocio)
        
     with tab_fin3:
-        mostrar_modulo_registro_gastos(ruta_negocio)
+        mostrar_modulo_registro_gastos(supabase)
 
 # ----------------- SECCIÓN INFORMES Y MOVIMIENTOS -----------------
 elif menu == "📈 Informes y Movimientos (Kardex)":

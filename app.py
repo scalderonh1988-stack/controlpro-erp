@@ -112,10 +112,10 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
 
     if tenant_dir:
         ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
-        ruta_logo_fpdf = ruta_logo.replace('\\', '/')
         if os.path.exists(ruta_logo):
             try:
-                pdf.image(ruta_logo_fpdf, x=10, y=8, w=25)
+                # Insertar la imagen en el PDF (coordenadas x=10, y=8, ancho=25mm)
+                pdf.image(ruta_logo, x=10, y=8, w=25)
             except Exception as e:
                 print(f"Error al cargar el logo en el PDF: {e}")
 

@@ -552,6 +552,10 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
                 st.info("ℹ️ No hay registros de retiros todavía.")
 
 def mostrar_modulo_reportes_avanzados(ruta_negocio):
+    if st.button("⬅️ Volver al Home", use_container_width=True):
+        st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
+        st.rerun()
+
     st.markdown("### 📊 Módulo de Reportes e Inteligencia de Negocio")
     st.info("📈 Analiza el rendimiento financiero, controla la salud de tus finanzas y exporta reportes clave para tu negocio.")
 

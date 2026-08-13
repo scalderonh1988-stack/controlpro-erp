@@ -551,6 +551,82 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
             else:
                 st.info("ℹ️ No hay registros de retiros todavía.")
 
+def mostrar_modulo_reportes_avanzados(ruta_negocio):
+    st.markdown("### 📊 Módulo de Reportes e Inteligencia de Negocio")
+    st.info("📈 Analiza el rendimiento financiero, controla la salud de tus finanzas y exporta reportes clave para tu negocio.")
+
+    # Rutas de archivos del negocio actual
+    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
+    archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
+    archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
+    archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
+
+    tab_r1, tab_r2, tab_r3 = st.tabs(["💰 Balance de Utilidades", "📈 Análisis de Gastos", "📑 Estado de Cartera y Vencimientos"])
+
+    with tab_r1:
+        st.markdown("#### 💵 Resumen General de Ingresos vs. Gastos Operativos")
+        
+        total_ingresos_dia = 0.0
+        if os.path.exists(archivo_cuadratura):
+            df_cuat = pd.read_excel(archivo_cuadratura)
+            if not df_cuat.empty and 'VentaTotal' in df_cuat.columns:
+                total_ingresos_dia = df_cuat['VentaTotal'].sum()
+
+        total_egresos_gastos = 0.0
+        if os.path.exists(archivo_gastos):
+            df_gst = pd.read_excel(archivo_gastos)
+            if not df_gst.empty and 'Monto' in df_gst.columns:
+                total_egresos_gastos = df_gst['Monto'].sum()
+
+        utilidad_estimada = total_ingresos_dia - total_egresos_gastos
+
+        col_rep1, col_rep2, col_rep3 = st.columns(3)
+        with col_rep1:
+            st.metric(label="🪙 Ingresos Totales Registrados", value=f"${total_ingresos_dia:,.2f}")
+        with col_rep2:
+            st.metric(label="📉 Gastos Operativos Totales", value=f"${total_egresos_gastos:,.2f}")
+        with col_rep3:
+            st.metric(label="💼 Margen Neto Operativo", value=f"${utilidad_estimada:,.2f}", delta="Estimado")
+
+        st.divider()
+        if os.path.exists(archivo_cuadratura) and not df_cuat.empty:
+            st.markdown("##### 📊 Histórico de Ingresos Diarios")
+            st.bar_chart(df_cuat.set_index('Fecha')['VentaTotal'] if 'Fecha' in df_cuat.columns else df_cuat['VentaTotal'])
+
+    with tab_r2:
+        st.markdown("#### 📂 Desglose de Gastos por Categoría")
+        if os.path.exists(archivo_gastos):
+            df_g = pd.read_excel(archivo_gastos)
+            if not df_g.empty and 'Categoria' in df_g.columns and 'Monto' in df_g.columns:
+                gasto_por_cat = df_g.groupby('Categoria')['Monto'].sum().reset_index()
+                st.dataframe(gasto_por_cat, use_container_width=True)
+                st.bar_chart(gasto_por_cat.set_index('Categoria')['Monto'])
+            else:
+                st.info("ℹ️ No hay suficientes datos de categorías en los gastos registrados.")
+        else:
+            st.info("ℹ️ Aún no hay un archivo de registros de gastos.")
+
+    with tab_r3:
+        st.markdown("#### ⏳ Reporte de Cuentas por Cobrar y Atrasos")
+        if os.path.exists(archivo_cxp):
+            df_cobrar = pd.read_excel(archivo_cxp)
+            if not df_cobrar.empty:
+                st.dataframe(df_cobrar, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay registros activos en Cuentas por Cobrar.")
+        else:
+            st.info("ℹ️ No existe archivo de Cuentas por Cobrar.")
+
+        st.markdown("#### 💳 Estado de Cuentas por Pagar (Proveedores)")
+        if os.path.exists(archivo_cpp):
+            df_pagar = pd.read_excel(archivo_cpp)
+            if not df_pagar.empty:
+                st.dataframe(df_pagar, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay registros en Cuentas por Pagar.")
+        else:
+            st.info("ℹ️ No existe archivo de Cuentas por Pagar.")
+
 
 # --- 4. SISTEMA DE AUTENTICACIÓN INTELIGENTE UNIFICADO ---
 if "autenticado" not in st.session_state:
@@ -688,6 +764,7 @@ modulos_totales = [
     "📊 Módulo de Finanzas",
     "📒 Cuadratura Diaria",
     "📑 Cuentas por Cobrar",
+    "📈 Reportes y Analítica",
     "🏦 Conciliación y Retiros Seguros",
     "⚙️ Configuración General"
 ]
@@ -865,6 +942,7 @@ if menu == "🏠 Home / Bienvenida":
         {"id": "cuadratura", "nombre_ref": "Cuadratura Diaria", "label": "📒 Cuadratura Diaria"},
         {"id": "cobrar", "nombre_ref": "Cuentas por Cobrar", "label": "📑 Cuentas por Cobrar"},
         {"id": "conci", "nombre_ref": "Conciliación y Retiros Seguros", "label": "🏦 Conciliación y Retiros Seguros"},
+        {"id": "report", "nombre_ref": "Reportes y Analítica", "label": "(📈 Reportes y Analítica)"},
         {"id": "conf", "nombre_ref": "Configuración General", "label": "⚙️ Configuración General"}
     ]
 

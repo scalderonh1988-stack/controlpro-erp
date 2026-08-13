@@ -940,25 +940,31 @@ if st.session_state.es_admin_dev:
 
             st.warning("⚠️ **Zona de Peligro:** La opción de fábrica eliminará todos los registros de ventas, gastos, inventario y documentos de este negocio.")
 
-            if st.button("🚨 Restablecer a Versión de Fábrica (Borrar Todo)", type="primary", key="btn_version_fabrica"):
-                try:
-                    import shutil
-                    # 1. Eliminar todos los archivos de Excel y configuraciones de prueba del cliente
-                    for archivo in os.listdir(dir_cliente_objetivo):
-                        ruta_archivo = os.path.join(dir_cliente_objetivo, archivo)
-                        if os.path.isfile(ruta_archivo) and archivo != "logo_empresa.png":
-                            os.remove(ruta_archivo)
-                    
-                    # 2. Eliminar las carpetas de archivadores de documentos
-                    for carpeta_sub in ["archivador_ventas", "archivador_compras"]:
-                        dir_sub = os.path.join(dir_cliente_objetivo, carpeta_sub)
-                        if os.path.exists(dir_sub):
-                            shutil.rmtree(dir_sub)
+            # 🔐 Checkbox de doble confirmación de seguridad
+            confirmar_borrado = st.checkbox("Confirmo que deseo restablecer este negocio a versión de fábrica", key="chk_confirmar_fabrica")
 
-                    st.success(f"✨ ¡Negocio '{negocio_a_limpiar}' restablecido a versión de fábrica con éxito!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Ocurrió un error al restablecer: {e}")
+            if st.button("🚨 Restablecer a Versión de Fábrica (Borrar Todo)", type="primary", key="btn_version_fabrica"):
+                if not confirmar_borrado:
+                    st.error("❌ Debes marcar la casilla de confirmación para autorizar el reseteo.")
+                else:
+                    try:
+                        import shutil
+                        # 1. Eliminar todos los archivos de Excel y configuraciones de prueba del cliente
+                        for archivo in os.listdir(dir_cliente_objetivo):
+                            ruta_archivo = os.path.join(dir_cliente_objetivo, archivo)
+                            if os.path.isfile(ruta_archivo) and archivo != "logo_empresa.png":
+                                os.remove(ruta_archivo)
+                        
+                        # 2. Eliminar las carpetas de archivadores de documentos
+                        for carpeta_sub in ["archivador_ventas", "archivador_compras"]:
+                            dir_sub = os.path.join(dir_cliente_objetivo, carpeta_sub)
+                            if os.path.exists(dir_sub):
+                                shutil.rmtree(dir_sub)
+
+                        st.success(f"✨ ¡Negocio '{negocio_a_limpiar}' restablecido a versión de fábrica con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Ocurrió un error al restablecer: {e}")
 
         with tab_crear:
             with st.form("form_crear_cliente_dev"):

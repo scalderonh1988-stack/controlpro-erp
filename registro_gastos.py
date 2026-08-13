@@ -1,18 +1,12 @@
 import streamlit as st
 import pandas as pd
-import os
 from datetime import datetime
 
-def mostrar_modulo_registro_gastos(ruta_negocio):
+def mostrar_modulo_registro_gastos(supabase):
     st.markdown("### 📋 Registro y Control de Gastos")
 
-    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
-
-    if not os.path.exists(archivo_gastos):
-        df_ini = pd.DataFrame(columns=['Fecha_Hora', 'Descripcion_Gasto', 'Categoria', 'Metodo_Pago', 'Documento', 'Monto'])
-        df_ini.to_excel(archivo_gastos, index=False)
-
-    df_gastos = pd.read_excel(archivo_gastos)
+    # Obtenemos el RUT del cliente que está usando el sistema ahora mismo
+    rut_actual = st.session_state.get("negocio_seleccionado")
 
     with st.form("form_nuevo_gasto_manual"):
         st.markdown("#### ➕ Registrar Gasto Manual")
@@ -34,27 +28,38 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
             elif monto_gasto <= 0:
                 st.warning("⚠️ El monto del gasto debe ser mayor a 0.")
             else:
-                nuevo_registro = pd.DataFrame([{
-                    'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'Descripcion_Gasto': desc_gasto,
-                    'Categoria': cat_gasto,
-                    'Metodo_Pago': metodo_pago,
-                    'Documento': doc_gasto,
-                    'Monto': monto_gasto
-                }])
-                df_actualizado = pd.concat([df_gastos, nuevo_registro], ignore_index=True)
-                df_actualizado.to_excel(archivo_gastos, index=False)
-                st.success("✅ ¡Gasto registrado con éxito!")
-                st.rerun()
+                # --- GUARDADO BLINDADO EN SUPABASE ---
+                nuevo_gasto = {
+                    "rut_empresa": rut_actual,
+                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "detalle": desc_gasto,
+                    "categoria": cat_gasto,
+                    "metodo_pago": metodo_pago,
+                    "documento": doc_gasto,
+                    "monto": monto_gasto
+                }
+                try:
+                    supabase.table("gastos").insert(nuevo_gasto).execute()
+                    st.success("✅ ¡Gasto registrado con éxito en la nube!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar en la nube: {e}")
 
     st.divider()
 
-    df_gastos = pd.read_excel(archivo_gastos)
+    # --- LECTURA BLINDADA DESDE SUPABASE ---
+    try:
+        # Traemos solo los gastos del cliente actual, ordenados por fecha
+        res = supabase.table("gastos").select("*").eq("rut_empresa", rut_actual).order("fecha", desc=True).execute()
+        df_gastos = pd.DataFrame(res.data)
+    except Exception as e:
+        df_gastos = pd.DataFrame()
+        st.error("Error al conectar con la base de datos.")
 
     if df_gastos.empty:
         st.info("ℹ️ No hay gastos registrados todavía en este negocio.")
     else:
-        total_egresos = df_gastos['Monto'].sum()
+        total_egresos = df_gastos['monto'].sum()
 
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -69,10 +74,13 @@ def mostrar_modulo_registro_gastos(ruta_negocio):
         for idx, row in df_gastos.iterrows():
             c_info, c_btn = st.columns([10, 1])
             with c_info:
-                st.info(f"📅 **{row.get('Fecha_Hora', '')}** | 📝 **{row.get('Descripcion_Gasto', '')}** | 🏷️ {row.get('Categoria', '')} | 💳 {row.get('Metodo_Pago', '')} | 📄 {row.get('Documento', 'Sin Doc')} | **Monto: ${float(row.get('Monto', 0)):,.2f}**")
+                st.info(f"📅 **{row.get('fecha', '')}** | 📝 **{row.get('detalle', '')}** | 🏷️ {row.get('categoria', '')} | 💳 {row.get('metodo_pago', '')} | 📄 {row.get('documento', 'Sin Doc')} | **Monto: ${float(row.get('monto', 0)):,.2f}**")
             with c_btn:
-                if st.button("🗑️", key=f"del_gasto_fila_{idx}", help="Eliminar este registro"):
-                    df_gastos = df_gastos.drop(idx).reset_index(drop=True)
-                    df_gastos.to_excel(archivo_gastos, index=False)
-                    st.success("✅ Gasto eliminado correctamente.")
-                    st.rerun()
+                # Ahora eliminamos usando el ID único e indestructible de Supabase
+                if st.button("🗑️", key=f"del_gasto_{row.get('id')}", help="Eliminar este registro"):
+                    try:
+                        supabase.table("gastos").delete().eq("id", row.get('id')).execute()
+                        st.success("✅ Gasto eliminado correctamente de la nube.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Error al eliminar el registro.")

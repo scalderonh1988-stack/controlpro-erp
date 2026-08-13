@@ -869,7 +869,8 @@ modulos_totales = [
     "🏦 Conciliación y Retiros Seguros",
     "⚙️ Configuración General"
 ]
-
+if st.session_state.get("es_admin_dev", False):
+    modulos_totales.append("🔑 Control Maestro de Licencias")
 # --- LÓGICA DE PERFILES Y ROLES GRANULARES ---
 ROLES_PERMISOS = {
     "Administrador": modulos_totales,
@@ -3001,6 +3002,83 @@ elif menu == "🏦 Conciliación y Retiros Seguros":
 # Dentro de tu menú de navegación lateral, agrega esta línea:
 elif menu == "📈 Reportes y Analítica":
     mostrar_modulo_reportes_avanzados(negocio_seleccionado)
+
+elif menu == "🔑 Control Maestro de Licencias":
+    mostrar_encabezado_con_home("🔑 Control Maestro de Licencias y Ciclos Fijos")
+    st.info("ℹ️ Panel de administración exclusivo para ver el estado de todos los clientes y modificar sus fechas de vigencia.")
+
+    try:
+        res_lic = supabase.table("empresas").select("*").execute()
+        lista_empresas_db = res_lic.data if res_lic and res_lic.data else []
+    except Exception as e:
+        lista_empresas_db = []
+        st.error(f"⚠️ Error al conectar con Supabase: {e}")
+
+    if lista_empresas_db:
+        hoy_actual = date.today()
+        tabla_resumen = []
+
+        for emp in lista_empresas_db:
+            rut_cli = str(emp.get("rut_empresa", "N/A"))
+            nombre_cli = str(emp.get("empresa_nombre", "Sin Nombre"))
+            f_exp_str = str(emp.get("fecha_expiracion", "2026-12-31"))
+            
+            try:
+                dias_restantes = (pd.to_datetime(f_exp_str).date() - hoy_actual).days
+            except Exception:
+                dias_restantes = 999
+
+            if dias_restantes > 5:
+                estado_txt = "🟢 Activa"
+            elif 0 <= dias_restantes <= 5:
+                estado_txt = "🟡 En Gracia"
+            else:
+                estado_txt = "🔴 Expirada / Suspendida"
+
+            tabla_resumen.append({
+                "RUT (Usuario)": rut_cli,
+                "Empresa": nombre_cli,
+                "Vencimiento": f_exp_str,
+                "Días Restantes": dias_restantes,
+                "Estado": estado_txt
+            })
+
+        st.dataframe(pd.DataFrame(tabla_resumen), use_container_width=True)
+
+        st.divider()
+        st.markdown("### ✏️ Modificar Fechas de Vigencia y Ciclo Fijo")
+        
+        nombres_clientes_dict = {emp.get("rut_empresa"): f"{emp.get('empresa_nombre')} (RUT: {emp.get('rut_empresa')})" for emp in lista_empresas_db}
+        rut_a_modificar = st.selectbox("Selecciona la Empresa a Gestionar:", options=list(nombres_clientes_dict.keys()), format_func=lambda x: nombres_clientes_dict[x])
+        
+        cliente_sel_data = next((emp for emp in lista_empresas_db if emp.get("rut_empresa") == rut_a_modificar), None)
+        
+        if cliente_sel_data:
+            f_actual_exp_str = cliente_sel_data.get("fecha_expiracion", str(hoy_actual))
+            
+            with st.form(f"form_mod_fechas_principal_{rut_a_modificar}"):
+                st.write(f"📌 *Editando a:* {cliente_sel_data.get('empresa_nombre')}")
+                try:
+                    f_default_date = pd.to_datetime(f_actual_exp_str).date()
+                except Exception:
+                    f_default_date = hoy_actual
+
+                nueva_fecha_fin = st.date_input("Fecha de Finalización del Periodo", value=f_default_date)
+                activar_licencia_check = st.checkbox("Licencia Activa (Desmarcar para suspensión total)", value=bool(cliente_sel_data.get("licencia_activa", True)))
+
+                if st.form_submit_button("💾 Guardar Nueva Vigencia en Supabase", type="primary"):
+                    try:
+                        supabase.table("empresas").update({
+                            "fecha_expiracion": str(nueva_fecha_fin),
+                            "licencia_activa": activar_licencia_check
+                        }).eq("rut_empresa", rut_a_modificar).execute()
+
+                        st.success(f"✅ ¡Vigencia actualizada correctamente! Nuevo vencimiento: {nueva_fecha_fin}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al actualizar en Supabase: {e}")
+    else:
+        st.warning("⚠️ No se encontraron registros de empresas en Supabase.")
 
 
 

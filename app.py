@@ -347,12 +347,11 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
         st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")        
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
-    st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja (Con Control de Margen Diferenciado)")
+    st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
     
     st.markdown("""
         <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
-            <strong>📌 Control de Caja Inteligente:</strong> Separa las ventas generales de los cigarrillos para aplicarles un 
-            markup o margen específico y proteger correctamente tu capital de reposición.
+            <strong>📌 Control de Caja Inteligente:</strong> Ingresa tus ingresos operacionales y configura de forma separada el bloque de cigarrillos con su propio margen de ganancia.
         </div>
     """, unsafe_allow_html=True)
 
@@ -364,23 +363,32 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
         ]).to_excel(archivo_cuadratura, index=False)
 
     with st.form("form_cuadratura_diaria"):
-        col_f1, col_f2 = st.columns(2)
+        fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
+        
+        st.divider()
+        st.markdown("#### 💰 Ingresos Generales de Caja")
+        col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
-            fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
-            efectivo_c = st.number_input("💵 Efectivo en Caja ($)", min_value=0.0, step=100.0, value=0.0)
-            transferencia_c = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
-            debito_c = st.number_input("💳 Débito / Tarjetas ($)", min_value=0.0, step=100.0, value=0.0)
+            efectivo_c = st.number_input("💵 Efectivo ($)", min_value=0.0, step=100.0, value=0.0)
         with col_f2:
-            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0, help="Venta específica de cigarrillos con margen independiente.")
+            transferencia_c = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_f3:
+            debito_c = st.number_input("💳 Débito / Tarjetas ($)", min_value=0.0, step=100.0, value=0.0)
+
+        col_f4, col_f5 = st.columns(2)
+        with col_f4:
             otros_ingresos_c = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_f5:
+            markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 
         st.divider()
-        st.markdown("#### ⚙️ Parámetros de Márgenes (Markups)")
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
-        with col_m2:
-            markup_cigarros = st.number_input("🚬 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0, help="Margen menor aplicado típicamente a los cigarrillos.")
+        # 📌 Bloque separado y ordenado al lado para Cigarrillos y su Markup
+        st.markdown("#### 🚬 Control Específico de Cigarrillos")
+        col_cig1, col_cig2 = st.columns(2)
+        with col_cig1:
+            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_cig2:
+            markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
 
         # Cálculos separados
         ventas_generales = efectivo_c + transferencia_c + debito_c + otros_ingresos_c
@@ -404,7 +412,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
         with col_res4:
             st.metric(label="💵 Utilidad Retirable Segura", value=f"${utilidad_neta_disponible:,.2f}", delta="Disponible")
 
-        observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal con margen de cigarrillos diferenciado")
+        observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal")
 
         btn_guardar_cuat = st.form_submit_button("💾 Guardar Cuadratura y Retiro", type="primary")
 
@@ -428,7 +436,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                     'Observaciones': observaciones_c
                 }])
                 pd.concat([df_cuat_ant, nuevo_registro], ignore_index=True).to_excel(archivo_cuadratura, index=False)
-                st.success("✅ ¡Cuadratura guardada con éxito! Capital y márgenes diferenciados correctamente.")
+                st.success("✅ ¡Cuadratura guardada con éxito!")
                 st.rerun()
 
     st.divider()

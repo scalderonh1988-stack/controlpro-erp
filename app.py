@@ -347,12 +347,12 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
         st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")        
 
 def mostrar_modulo_cuadratura_diaria(ruta_negocio):
-    st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja")
+    st.markdown("### 📒 Cuadratura Diaria y Cuaderno de Caja (Con Control de Margen Diferenciado)")
     
     st.markdown("""
         <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
-            <strong>📌 Cuaderno Diario de Caja:</strong> Registra los ingresos operativos diarios, calcula la venta total y 
-            protege tu capital de reposición aplicando el Markup configurado.
+            <strong>📌 Control de Caja Inteligente:</strong> Separa las ventas generales de los cigarrillos para aplicarles un 
+            markup o margen específico y proteger correctamente tu capital de reposición.
         </div>
     """, unsafe_allow_html=True)
 
@@ -360,7 +360,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if not os.path.exists(archivo_cuadratura):
         pd.DataFrame(columns=[
             'Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 
-            'VentaTotal', 'MarkupAplicado', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones'
+            'VentaTotal', 'MarkupGeneral', 'MarkupCigarros', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones'
         ]).to_excel(archivo_cuadratura, index=False)
 
     with st.form("form_cuadratura_diaria"):
@@ -369,33 +369,42 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
             efectivo_c = st.number_input("💵 Efectivo en Caja ($)", min_value=0.0, step=100.0, value=0.0)
             transferencia_c = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
-        with col_f2:
             debito_c = st.number_input("💳 Débito / Tarjetas ($)", min_value=0.0, step=100.0, value=0.0)
-            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
+        with col_f2:
+            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0, help="Venta específica de cigarrillos con margen independiente.")
             otros_ingresos_c = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
 
         st.divider()
-        st.markdown("#### ⚙️ Parámetro de Markup para Retiro Seguro")
-        markup_default = st.number_input("Porcentaje de Markup / Margen Promedio (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
+        st.markdown("#### ⚙️ Parámetros de Márgenes (Markups)")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
+        with col_m2:
+            markup_cigarros = st.number_input("🚬 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0, help="Margen menor aplicado típicamente a los cigarrillos.")
 
-        venta_total_calculada = efectivo_c + transferencia_c + debito_c + cigarrillos_c + otros_ingresos_c
+        # Cálculos separados
+        ventas_generales = efectivo_c + transferencia_c + debito_c + otros_ingresos_c
+        venta_total_calculada = ventas_generales + cigarrillos_c
 
-        markup_dec = markup_default / 100.0
-        costo_reposicion_mercaderia = venta_total_calculada / (1.0 + markup_dec)
-        utilidad_neta_disponible = venta_total_calculada - costo_reposicion_mercaderia
+        # Fondo de reposición diferenciado
+        costo_general = ventas_generales / (1.0 + (markup_general / 100.0))
+        costo_cigarros = cigarrillos_c / (1.0 + (markup_cigarros / 100.0))
+        
+        costo_reposicion_total = costo_general + costo_cigarros
+        utilidad_neta_disponible = venta_total_calculada - costo_reposicion_total
 
         st.divider()
         col_res1, col_res2, col_res3, col_res4 = st.columns(4)
         with col_res1:
             st.metric(label="🪙 Venta Total Día", value=f"${venta_total_calculada:,.2f}")
         with col_res2:
-            st.metric(label="🔒 Fondo Reposición (Intocable)", value=f"${costo_reposicion_mercaderia:,.2f}", delta="No retirar")
+            st.metric(label="🚬 Venta Cigarrillos", value=f"${cigarrillos_c:,.2f}")
         with col_res3:
-            st.metric(label="💵 Utilidad Retirable Segura", value=f"${utilidad_neta_disponible:,.2f}", delta="Disponible")
+            st.metric(label="🔒 Fondo Reposición Total", value=f"${costo_reposicion_total:,.2f}", delta="Intocable")
         with col_res4:
-            st.metric(label="📈 Markup Aplicado", value=f"{markup_default}%")
+            st.metric(label="💵 Utilidad Retirable Segura", value=f"${utilidad_neta_disponible:,.2f}", delta="Disponible")
 
-        observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal")
+        observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal con margen de cigarrillos diferenciado")
 
         btn_guardar_cuat = st.form_submit_button("💾 Guardar Cuadratura y Retiro", type="primary")
 
@@ -412,13 +421,14 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                     'Cigarros': cigarrillos_c,
                     'Otros_Ingresos': otros_ingresos_c,
                     'VentaTotal': venta_total_calculada,
-                    'MarkupAplicado': markup_default,
-                    'CostoReposicion': costo_reposicion_mercaderia,
+                    'MarkupGeneral': markup_general,
+                    'MarkupCigarros': markup_cigarros,
+                    'CostoReposicion': costo_reposicion_total,
                     'UtilidadRetirable': utilidad_neta_disponible,
                     'Observaciones': observaciones_c
                 }])
                 pd.concat([df_cuat_ant, nuevo_registro], ignore_index=True).to_excel(archivo_cuadratura, index=False)
-                st.success("✅ ¡Cuadratura guardada con éxito! Capital protegido correctamente.")
+                st.success("✅ ¡Cuadratura guardada con éxito! Capital y márgenes diferenciados correctamente.")
                 st.rerun()
 
     st.divider()
@@ -1254,7 +1264,7 @@ elif menu == "📊 Dashboard Ejecutivo":
                 st.info("ℹ️ No hay facturas de proveedores pendientes de pago.")
         else:
             st.info("ℹ️ Módulo de cuentas por pagar sin registros activos.")
-            
+
 # ----------------- SECCIÓN INVENTARIO GENERAL -----------------
 elif menu == "📦 Inventario y Productos":
     mostrar_encabezado_con_home("Gestión de Bases de Datos")

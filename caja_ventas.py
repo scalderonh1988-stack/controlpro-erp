@@ -20,7 +20,7 @@ if not RUT_NEGOCIO:
     print("❌ Error: Debes ingresar un RUT válido para operar la caja.")
     exit()
 
-archivo_base = "BASE DE DATOS.xlsx"
+archivo_base = os.path.join("clientes", RUT_NEGOCIO, "BASE DE DATOS.xlsx")
 
 if not os.path.exists(archivo_base):
     print(f"❌ Error crítico: No se encuentra el archivo maestro '{archivo_base}'.")
@@ -31,13 +31,13 @@ else:
     df_base = pd.read_excel(archivo_base, dtype={'Código': str})
     headers = [cell.value for cell in ws[1]]
 
-    col_stock = next((col for col in df_base.columns if 'stock' in col.lower() or 'dispo' in col.lower() or 'cantidad' in col.lower()), None)
+    col_stock = next((col for col in df_base.columns if 'stock' in col.lower() or 'cantidad' in col.lower()), None)
     col_precio = next((col for col in df_base.columns if 'precio' in col.lower() or 'venta' in col.lower()), None)
 
     if not col_stock or not col_precio:
         print("⚠️ No se encontró la columna de Stock o Precio en la base maestra.")
     else:
-        idx_stock_ws = headers.index(col_stock) + 1
+        idx_stock_ws = df_base.columns.get_loc(col_stock) + 1
         
         print("\n---------------------------------------------------------")
         print(f"🟢 CAJA ABIERTA - LOCAL: {RUT_NEGOCIO}")
@@ -62,9 +62,19 @@ else:
             else:
                 row_index_df = match.index[0]
                 descripcion = match['Descripción'].values[0] if 'Descripción' in match.columns else "Sin descripción"
-                precio_venta = float(match[col_precio].values[0]) if pd.notna(match[col_precio].values[0]) else 0
-                stock_actual = float(match[col_stock].values[0]) if pd.notna(match[col_stock].values[0]) else 0
-
+               # --- EXTRACCIÓN SEGURA DE PRECIO ---
+                try:
+                    precio_venta = float(match[col_precio].values[0])
+                except Exception:
+                    precio_venta = 0.0
+                
+                # --- EXTRACCIÓN SEGURA DE STOCK ---
+                try:
+                    stock_actual = float(match[col_stock].values[0])
+                except Exception:
+                    # Si el Excel dice "Si" o tiene letras, asumimos que hay stock y le ponemos 99 para no frenar la venta
+                    print(f"⚠️ Nota: Tu Excel dice '{match[col_stock].values[0]}' en vez de un número. Asumiendo stock disponible.")
+                    stock_actual = 99.0
                 print(f"📦 Producto: {descripcion}")
                 print(f"💵 Precio Unitario: ${precio_venta:,.2f} | Stock Disponible: {stock_actual}")
 

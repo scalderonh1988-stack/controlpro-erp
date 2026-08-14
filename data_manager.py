@@ -15,10 +15,17 @@ BASE_TENANTS_DIR = "clientes"
 
 def get_current_tenant() -> str:
     """
-    Obtiene el identificador del negocio activo desde la sesión de Streamlit.
+    Obtiene el identificador del negocio activo desde la sesión de Streamlit 
+    de forma compatible con cualquier variable de estado que uses.
     """
-    if "tenant_id" not in st.session_state:
-        st.session_state.tenant_id = "negocio_demo"
+    if "tenant_id" in st.session_state:
+        return st.session_state.tenant_id
+    if "negocio_actual" in st.session_state:
+        return st.session_state.negocio_actual
+    if "negocio_seleccionado" in st.session_state:
+        return st.session_state.negocio_seleccionado
+        
+    st.session_state.tenant_id = "negocio_demo"
     return st.session_state.tenant_id
 
 def get_tenant_path(filename: str) -> str:
@@ -48,14 +55,29 @@ def save_excel_data(df: pd.DataFrame, filename: str):
 
 def cargar_maestro_clientes():
     """
-    Carga la lista de clientes desde Supabase en tiempo real, 
-    devolviendo un diccionario para no romper la compatibilidad con el sistema anterior.
+    Carga la lista de clientes desde Supabase filtrando de forma estricta 
+    por el negocio activo, probando las columnas más comunes para evitar fugas de datos.
     """
     try:
         tenant_id = get_current_tenant()
-        st.write(f"Depurando: El sistema está buscando clientes para el ID: '{tenant_id}'")
-        respuesta = supabase.table("clientes").select("*").eq("id_negocio", tenant_id).execute()
         maestro = {}
+        respuesta = None
+        
+        # Probamos dinámicamente los nombres de columna más comunes en Supabase
+        columnas_intento = ["id_negocio", "rut_empresa", "rut_negocio", "negocio_id"]
+        
+        for col in columnas_intento:
+            try:
+                res = supabase.table("clientes").select("*").eq(col, tenant_id).execute()
+                if res.data is not None:
+                    respuesta = res
+                    break
+            except Exception:
+                continue
+                
+        # Si ninguna columna estándar dio resultados, traemos un respaldo vacío controlado
+        if not respuesta or not respuesta.data:
+            return {}
         
         # Transformamos la lista de la nube al formato de diccionario {rut: datos}
         for cliente in respuesta.data:
@@ -70,13 +92,14 @@ def cargar_maestro_clientes():
 
 def guardar_nuevo_cliente(id_negocio, datos_cliente):
     """
-    Guarda un nuevo cliente (tenant) directamente en Supabase y 
-    crea su carpeta física por si hay módulos antiguos que la necesiten.
+    Guarda un nuevo cliente directamente en Supabase asegurando que la relación 
+    con el negocio quede grabada correctamente en todas las columnas de control.
     """
     # 1. Guardado en la Nube (Supabase)
     try:
-        # Aseguramos que el RUT esté inyectado en el diccionario antes de subirlo
+        # Inyectamos el ID en los nombres de columna estándar para prevenir desincronizaciones
         datos_cliente["id_negocio"] = id_negocio
+        datos_cliente["rut_empresa"] = id_negocio
         
         supabase.table("clientes").upsert(
             datos_cliente, 

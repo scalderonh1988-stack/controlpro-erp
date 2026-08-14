@@ -1232,13 +1232,13 @@ elif menu == "📦 Inventario y Productos":
                     else:
                         # 2. Preparamos el diccionario para subirlo directo a Supabase
                         nuevo_cliente_nube = {
-                            "rut": str(cl_rut).strip(),
-                            "nombre": str(cl_nom).strip(),
-                            "telefono": str(cl_tel).strip(),
-                            "email": str(cl_mail).strip(),
-                            "direccion": str(cl_dir).strip(),
-                            "id_negocio": str(rut_actual).strip() # Candado vital para la empresa actual
-                        }
+                        "rut": str(cl_rut).strip(),
+                        "nombre": str(cl_nom).strip(),
+                        "telefono": str(cl_tel).strip(),
+                        "correo": str(cl_mail).strip(),  # <-- Cambiado de "email" a "correo"
+                        "direccion": str(cl_dir).strip(),
+                        "id_negocio": str(rut_actual).strip()
+                    }
                         
                         try:
                             # 3. Guardado directo en la tabla 'clientes' de Supabase
@@ -1250,10 +1250,33 @@ elif menu == "📦 Inventario y Productos":
 
     with tab_inv3:
         st.markdown("#### 🚚 Directorio de Proveedores")
-        df_proveedores = cargar_maestro_proveedores(ruta_negocio)
+        
+        # 1. Cargar proveedores directamente desde Supabase filtrando por el negocio activo
+        df_proveedores = pd.DataFrame()
+        try:
+            res_prov = supabase.table("proveedores").select("*").eq("id_negocio", rut_actual).execute()
+            if res_prov.data:
+                df_proveedores = pd.DataFrame(res_prov.data)
+                # Normalizamos las columnas para que la tabla se dibuje correctamente en la interfaz
+                renames_prov = {}
+                if "nombre" in df_proveedores.columns and "Nombre_Proveedor" not in df_proveedores.columns:
+                    renames_prov["nombre"] = "Nombre_Proveedor"
+                if "rut" in df_proveedores.columns and "Rut" not in df_proveedores.columns:
+                    renames_prov["rut"] = "Rut"
+                if "contacto" in df_proveedores.columns and "Contacto" not in df_proveedores.columns:
+                    renames_prov["contacto"] = "Contacto"
+                if "telefono" in df_proveedores.columns and "Telefono" not in df_proveedores.columns:
+                    renames_prov["telefono"] = "Telefono"
+                if "email" in df_proveedores.columns and "Email" not in df_proveedores.columns:
+                    renames_prov["email"] = "Email"
+                if renames_prov:
+                    df_proveedores = df_proveedores.rename(columns=renames_prov)
+        except Exception as e:
+            st.error(f"⚠️ Error cargando proveedores desde la nube: {e}")
+
         st.dataframe(df_proveedores, use_container_width=True)
         
-        with st.form("form_nuevo_proveedor_local", clear_on_submit=True):
+        with st.form("form_nuevo_proveedor_nube", clear_on_submit=True):
             st.markdown("##### Registrar Proveedor Nuevo")
             pr_nom = st.text_input("Nombre del Proveedor")
             pr_rut = st.text_input("RUT Proveedor")
@@ -1263,12 +1286,26 @@ elif menu == "📦 Inventario y Productos":
             
             btn_g_prov = st.form_submit_button("💾 Guardar Proveedor")
             if btn_g_prov:
-                if not pr_nom:
-                    st.warning("⚠️ Ingresa el nombre del proveedor.")
+                if not pr_nom or not pr_rut:
+                    st.warning("⚠️ Debes ingresar al menos el nombre y el RUT del proveedor.")
                 else:
-                    guardar_nuevo_proveedor(ruta_negocio, pr_nom, pr_rut, pr_cont, pr_tel, pr_mail)
-                    st.success("✅ ¡Proveedor guardado con éxito!")
-                    st.rerun()
+                    # 2. Preparamos el registro para subirlo directamente a Supabase
+                    nuevo_proveedor_nube = {
+                        "rut": str(pr_rut).strip(),
+                        "nombre": str(pr_nom).strip(),
+                        "contacto": str(pr_cont).strip(),
+                        "telefono": str(pr_tel).strip(),
+                        "email": str(pr_mail).strip(),
+                        "id_negocio": str(rut_actual).strip() # Candado de seguridad por empresa
+                    }
+                    
+                    try:
+                        # 3. Guardado directo en la tabla 'proveedores' de Supabase
+                        supabase.table("proveedores").upsert(nuevo_proveedor_nube, on_conflict="rut").execute()
+                        st.success("✅ ¡Proveedor guardado con éxito en la nube!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar en Supabase: {e}")
 
                     
 

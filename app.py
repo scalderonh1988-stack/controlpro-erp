@@ -41,7 +41,7 @@ def guardar_nuevo_proveedor(ruta_negocio, nombre, rut="", contacto="", telefono=
 
 # ⚙️ 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE LO PRIMERO)
 st.set_page_config(
-    page_title="ControlPRO ERP - Gestión Inteligente",
+    page_title="CREC-ERP - Gestión Inteligente",
     page_icon="📦",
     layout="wide"
 )
@@ -729,7 +729,7 @@ if "intentos_fallidos" not in st.session_state:
     st.session_state.intentos_fallidos = 0
 
 if not st.session_state.autenticado:
-    st.markdown('<p class="main-title">🔐 ControlPRO ERP - Acceso Blindado</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">🔐 CREC-ERP - Acceso Blindado</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-title">Sistema protegido de gestión empresarial</p>', unsafe_allow_html=True)
  
     if st.session_state.intentos_fallidos >= 3:
@@ -1038,7 +1038,7 @@ if st.session_state.es_admin_dev:
                         st.error(f"❌ Ocurrió un error al restablecer: {e}")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("© 2026 ControlPRO ERP")
+st.sidebar.markdown("© 2026 CREC-ERP")
 st.sidebar.markdown("Desarrollado por **Sebastián Calderón**")
 
 # --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN ---
@@ -1103,7 +1103,7 @@ def mostrar_encabezado_con_home(titulo_modulo):
 
 # --- 8. RENDERIZADO DEL HOME FIJO Y MÓDULOS ---
 if menu == "🏠 Home / Bienvenida":
-    st.markdown(f"<p class='main-title'>🪙 ControlPRO ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p class='main-title'>🪙 CREC-ERP: {st.session_state.nombre_empresa if 'nombre_empresa' in st.session_state else 'GENERAL'}</p>", unsafe_allow_html=True)
     st.markdown("<p class='sub-title'>Selecciona un módulo para comenzar:</p>", unsafe_allow_html=True)
    
     # 🚀 BOTÓN FORZADO EXCLUSIVO PARA EL DESARROLLADOR

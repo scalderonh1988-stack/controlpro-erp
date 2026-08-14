@@ -1295,8 +1295,8 @@ elif menu == "📦 Inventario y Productos":
                         "nombre": str(pr_nom).strip(),
                         "contacto": str(pr_cont).strip(),
                         "telefono": str(pr_tel).strip(),
-                        "email": str(pr_mail).strip(),
-                        "id_negocio": str(rut_actual).strip() # Candado de seguridad por empresa
+                        "correo": str(pr_mail).strip(),  # <-- Cambiado de "email" a "correo"
+                        "id_negocio": str(rut_actual).strip()
                     }
                     
                     try:

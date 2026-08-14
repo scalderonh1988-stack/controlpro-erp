@@ -2045,20 +2045,17 @@ elif menu == "🛒 Registrar Compra (CPP)":
         if accion_producto == "📥 Registrar Compra / GRC (Factura con Lotes)":
             st.markdown("### 📋 Cabecera de la Recepción de Compra (GRC)")
 
-            path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
+            # --- CARGA DE PROVEEDORES DIRECTO DESDE LA NUBE (SUPABASE) ---
+            lista_proveedores = []
             try:
-                df_prov_list = pd.read_excel(path_db, sheet_name="BD_Proveedores", dtype={'RUT': str})
-                lista_proveedores = df_prov_list['Nombre'].tolist() if not df_prov_list.empty else ["Sin Proveedores Registrados"]
-            except Exception:
-                try:
-                    archivo_prov_alt = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx") if 'ruta_negocio' in globals() else "Maestro_Proveedores.xlsx"
-                    if os.path.exists(archivo_prov_alt):
-                        df_prov_list = pd.read_excel(archivo_prov_alt)
-                        lista_proveedores = df_prov_list['Nombre_Proveedor'].tolist() if 'Nombre_Proveedor' in df_prov_list.columns else ["Proveedor General"]
-                    else:
-                        lista_proveedores = ["Proveedor General"]
-                except Exception:
-                    lista_proveedores = ["Proveedor General"]
+                res_prov_nube = supabase.table("proveedores").select("nombre").eq("id_negocio", rut_actual).execute()
+                if res_prov_nube.data:
+                    lista_proveedores = [p["nombre"] for p in res_prov_nube.data if p.get("nombre")]
+            except Exception as e:
+                print(f"Error cargando proveedores desde Supabase en GRC: {e}")
+
+            if not lista_proveedores:
+                lista_proveedores = ["Proveedor General"]
 
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:

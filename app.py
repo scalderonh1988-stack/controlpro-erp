@@ -1342,7 +1342,7 @@ elif menu == "📊 Dashboard Ejecutivo":
 
     # 3. Cálculo de Inventario y Ganancia Potencial desde la Nube
     try:
-        res_prod = supabase.table("productos").select("costo, precio_venta, stock").eq("rut_empresa", st.session_state.negocio_seleccionado).execute()
+        res_prod = supabase.table("productos").select("costo, precio_venta, stock").eq("rut_empresa", st.session_state.negocio_seleccionado).limit(10000).execute()
         if res_prod.data:
             df_prod_nube = pd.DataFrame(res_prod.data)
             df_prod_nube['costo'] = pd.to_numeric(df_prod_nube['costo'], errors='coerce').fillna(0)
@@ -1483,7 +1483,7 @@ elif menu == "📦 Inventario y Productos":
         st.markdown("### 📦 Administración de Productos (Nube)")
         rut_actual = st.session_state.get("negocio_seleccionado")
         try:
-            res_inv2 = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).execute()
+            res_inv2 = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).limit(10000).execute()
             df_base_nube = pd.DataFrame(res_inv2.data)
             st.success(f"✅ Base de datos conectada con éxito. Total de productos registrados: {len(df_base_nube)}")
            
@@ -2894,7 +2894,7 @@ PAGO: {forma_pago.upper()}
         # --- LÓGICA DE INVENTARIO CONECTADA A LA NUBE (POS) ---
         df_nube = pd.DataFrame()
         try:
-            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock").eq("rut_empresa", rut_actual).execute()
+            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock").eq("rut_empresa", rut_actual).limit(10000).execute()
             if res_pos.data:
                 df_nube = pd.DataFrame(res_pos.data)
         except Exception as e:

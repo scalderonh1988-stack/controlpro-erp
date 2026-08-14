@@ -1910,16 +1910,18 @@ elif menu == "⚠️ Control y Gestión de Inventario":
     with sub_tab1:
         st.markdown(f"### 🚦 Clasificación Automática de Vencimientos (Lotes Activos)")
       
+        # --- ASEGURAR VARIABLE DE NEGOCIO ---
+        empresa_id = rut_actual if 'rut_actual' in globals() and rut_actual else locals().get('negocio_seleccionado', '77297004-8')
+
         # --- CARGA DE LOTES DESDE SUPABASE ---
         df_lotes_venc = pd.DataFrame()
         try:
-            res_lotes_nube = supabase.table("lotes").select("*").eq("rut_empresa", rut_actual).execute()
+            res_lotes_nube = supabase.table("lotes").select("*").eq("rut_empresa", empresa_id).execute()
             if res_lotes_nube.data:
                 df_lotes_venc = pd.DataFrame(res_lotes_nube.data)
         except Exception as e:
             st.error(f"⚠️ Error cargando lotes desde Supabase: {e}")
 
-        # Se admiten tanto nombres en minúscula como en mayúscula para evitar bloqueos
         col_f_venc = next((c for c in df_lotes_venc.columns if c.lower() in ['fechavencimiento', 'fecha_vencimiento']), None)
         
         if not df_lotes_venc.empty and col_f_venc:

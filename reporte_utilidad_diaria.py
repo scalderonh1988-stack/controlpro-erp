@@ -1,118 +1,143 @@
-import pandas as pd
-import openpyxl
 import os
 from datetime import datetime
+import openpyxl
+from supabase import create_client, Client
 
-print("📊 Generando el Reporte de Utilidad Diaria y Control de Retiros...")
+# --- CONFIGURACIÓN DE LA NUBE (SUPABASE) ---
+SUPABASE_URL = "https://dmkjlcjrobszhwasrofc.supabase.co"
+SUPABASE_KEY = "sb_publishable_uGVmMWz7T9aShxTMm_Vrgw_QFvRyTmH"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-archivo_base = "BASE DE DATOS.xlsx"
-archivo_ventas_dia = "Ventas_Diarias.xlsx"
-archivo_reporte = "Reporte_Utilidad_Diaria.xlsx"
+print("📊 Generando el Reporte de Utilidad Diaria y Control de Retiros desde la Nube...")
 
-if not os.path.exists(archivo_base):
-    print(f"❌ Error crítico: No se encuentra el archivo maestro '{archivo_base}'.")
-else:
-    # Si aún no existe un archivo de ventas diarias de prueba, lo creamos automáticamente
-    if not os.path.exists(archivo_ventas_dia):
-        print(f"⚠️ No se encontró '{archivo_ventas_dia}'. Creando plantilla de ventas diarias de ejemplo...")
-        df_ejemplo = pd.DataFrame({
-            'Fecha': [datetime.now().strftime('%Y-%m-%d')],
-            'Código': ['7802810012531'],
-            'Cantidad_Vendida': [5]
-        })
-        df_ejemplo.to_excel(archivo_ventas_dia, index=False)
-        print(f"📁 Plantilla creada: {archivo_ventas_dia}. Puedes registrar tus ventas diarias aquí.")
+# --- CONTROL DE SEGURIDAD ---
+RUT_NEGOCIO = input("🔑 Ingresa el RUT de este local (ej: 12345678-9) para generar el reporte: ").strip()
 
-    # 1. Leemos la base de datos maestra y las ventas del día
-    df_base = pd.read_excel(archivo_base, dtype={'Código': str})
-    df_ventas = pd.read_excel(archivo_ventas_dia, dtype={'Código': str})
+if not RUT_NEGOCIO:
+    print("❌ Error: Debes ingresar un RUT válido.")
+    exit()
 
-    # Identificamos columnas clave
-    col_costo = next((col for col in df_base.columns if 'costo' in col.lower()), None)
-    col_precio = next((col for col in df_base.columns if 'precio' in col.lower() or 'venta' in col.lower()), None)
+archivo_reporte = f"Reporte_Utilidad_Diaria_{RUT_NEGOCIO}.xlsx"
 
-    if not col_costo or not col_precio:
-        print("⚠️ Faltan columnas de Costo o Precio de Venta en la base maestra.")
-    else:
-        # Limpiamos y convertimos a valores numéricos
-        df_base[col_costo] = pd.to_numeric(df_base[col_costo], errors='coerce').fillna(0)
-        df_base[col_precio] = pd.to_numeric(df_base[col_precio], errors='coerce').fillna(0)
+# 1. Obtenemos la fecha de hoy para filtrar
+fecha_hoy = datetime.now().strftime('%Y-%m-%d')
+print(f"⏳ Descargando ventas de hoy ({fecha_hoy})...")
 
-        IVA = 0.19
-        resumen_diario = []
+try:
+    # 2. Traemos las ventas del día desde Supabase
+    res_ventas = supabase.table("ventas") \
+        .select("*") \
+        .eq("rut_empresa", RUT_NEGOCIO) \
+        .like("fecha", f"{fecha_hoy}%") \
+        .execute()
+    ventas_hoy = res_ventas.data
 
-        # 2. Procesamos las ventas cruzándolas con los costos y precios netos
-        for _, row_v in df_ventas.iterrows():
-            cod = str(row_v['Código']).strip()
-            cantidad = float(row_v['Cantidad_Vendida']) if pd.notna(row_v.get('Cantidad_Vendida')) else 0
-            fecha_venta = row_v['Fecha'] if 'Fecha' in df_ventas.columns else datetime.now().strftime('%Y-%m-%d')
+    if not ventas_hoy:
+        print("ℹ️ No se registraron ventas en la nube para el día de hoy.")
+        exit()
 
-            match = df_base[df_base['Código'].astype(str).str.strip() == cod]
+    print(f"✅ Se encontraron {len(ventas_hoy)} transacciones hoy. Cruzando con costos del inventario...")
 
-            if not match.empty:
-                desc = match['Descripción'].values[0] if 'Descripción' in match.columns else "Sin descripción"
-                p_bruto = match[col_precio].values[0]
-                c_bruto = match[col_costo].values[0]
+    # 3. Traemos el catálogo de productos para conocer los costos
+    res_productos = supabase.table("productos") \
+        .select("codigo, descripcion, costo, precio_venta") \
+        .eq("rut_empresa", RUT_NEGOCIO) \
+        .execute()
+    
+    # Armamos un "diccionario" en la memoria para buscar súper rápido por descripción
+    catalogo = {p['descripcion']: p for p in res_productos.data if p['descripcion']}
 
-                # Desglose neto (sin IVA 19%)
-                p_neto = p_bruto / (1 + IVA)
-                c_neto = c_bruto / (1 + IVA)
+    IVA = 0.19
+    resumen_diario = []
+    total_recaudado = 0.0
+    total_utilidad_dia = 0.0
 
-                # Totales diarios para esta línea de venta
-                total_venta_bruta = p_bruto * cantidad
-                total_costo_neto = c_neto * cantidad
-                total_venta_neta = p_neto * cantidad
-                
-                # Utilidad bruta y neta del día por producto
-                utilidad_neta_total = (p_neto - c_neto) * cantidad
+    # 4. Procesamos cada venta cruzándola con los costos
+    for venta in ventas_hoy:
+        detalle = venta.get('detalle', '')
+        
+        # Extraemos la descripción y la cantidad del texto que guardó la caja
+        descripcion_venta = detalle
+        cantidad = 1.0
+        if "(Cant: " in detalle:
+            partes = detalle.split(" (Cant: ")
+            descripcion_venta = partes[0].strip()
+            try:
+                cantidad = float(partes[1].replace(")", "").strip())
+            except ValueError:
+                cantidad = 1.0
 
-                resumen_diario.append({
-                    'Fecha': fecha_venta,
-                    'Código': cod,
-                    'Descripción': desc,
-                    'Cantidad_Vendida': cantidad,
-                    'Venta_Total_Bruta': round(total_venta_bruta, 2),
-                    'Costo_Neto_Total': round(total_costo_neto, 2),
-                    'Utilidad_Neta_Generada': round(utilidad_neta_total, 2)
-                })
+        # Buscamos los valores originales del producto en el catálogo
+        producto = catalogo.get(descripcion_venta)
+        
+        if producto:
+            cod = producto.get('codigo', 'Sin Código')
+            c_bruto = float(producto.get('costo') or 0.0)
+            p_bruto = float(producto.get('precio_venta') or 0.0)
+            
+            # Desglose neto (sin IVA 19%)
+            p_neto = p_bruto / (1 + IVA)
+            c_neto = c_bruto / (1 + IVA)
 
-        if resumen_diario:
-            df_resumen = pd.DataFrame(resumen_diario)
+            # Totales diarios para esta línea de venta
+            total_venta_bruta = p_bruto * cantidad
+            total_costo_neto = c_neto * cantidad
+            utilidad_neta_total = (p_neto - c_neto) * cantidad
 
-            # Totales generales del día
-            total_recaudado = df_resumen['Venta_Total_Bruta'].sum()
-            total_utilidad_dia = df_resumen['Utilidad_Neta_Generada'].sum()
+            total_recaudado += total_venta_bruta
+            total_utilidad_dia += utilidad_neta_total
 
-            # 3. Guardamos el reporte prolijo usando openpyxl
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "UtilidadDiaria"
-
-            headers = list(df_resumen.columns)
-            ws.append(headers)
-
-            for _, row in df_resumen.iterrows():
-                fila_valores = [str(row[col]) if col == 'Código' else row[col] for col in headers]
-                ws.append(fila_valores)
-
-            # Agregamos una fila final con los totales clave para el negocio
-            ws.append([])
-            ws.append(["--- RESUMEN FINANCIERO DIARIO ---"])
-            ws.append(["Total Caja Bruta Recaudada:", total_recaudado])
-            ws.append(["Utilidad Neta Real del Día (Ganancia Pura):", total_utilidad_dia])
-
-            # Blindamos la columna A con formato de texto '@'
-            for cell in ws['A']:
-                if cell.row > 1 and cell.value and not cell.value.startswith('---') and not cell.value.startswith('Total'):
-                    cell.number_format = '@'
-                    cell.data_type = 's'
-
-            wb.save(archivo_reporte)
-            print(f"✅ ¡Reporte de utilidad diaria generado con éxito!")
-            print(f"📁 Archivo guardado como: '{archivo_reporte}'.")
-            print("\n---------------------------------------------------")
-            print(f"💵 Venta Bruta Total en Caja: ${total_recaudado:,.2f}")
-            print(f"💰 Utilidad Neta Real (Ganancia para retiro seguro): ${total_utilidad_dia:,.2f}")
-            print("---------------------------------------------------")
+            resumen_diario.append([
+                venta.get('fecha'),
+                cod,
+                descripcion_venta,
+                cantidad,
+                round(total_venta_bruta, 2),
+                round(total_costo_neto, 2),
+                round(utilidad_neta_total, 2)
+            ])
         else:
-            print("ℹ️ No se encontraron coincidencias de productos vendidos.")
+            # Si el producto se vendió pero luego fue borrado del catálogo
+            resumen_diario.append([
+                venta.get('fecha'),
+                "N/A",
+                descripcion_venta,
+                cantidad,
+                venta.get('monto'),
+                0,
+                0
+            ])
+
+    # 5. Generamos el archivo Excel (manteniendo tu formato original)
+    if resumen_diario:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "UtilidadDiaria"
+
+        headers = ['Fecha', 'Código', 'Descripción', 'Cantidad_Vendida', 'Venta_Total_Bruta', 'Costo_Neto_Total', 'Utilidad_Neta_Generada']
+        ws.append(headers)
+
+        for fila in resumen_diario:
+            ws.append(fila)
+
+        # Fila final con totales
+        ws.append([])
+        ws.append(["--- RESUMEN FINANCIERO DIARIO ---"])
+        ws.append(["Total Caja Bruta Recaudada:", round(total_recaudado, 2)])
+        ws.append(["Utilidad Neta Real del Día (Ganancia Pura):", round(total_utilidad_dia, 2)])
+
+        # Blindamos la columna B con formato de texto '@' para los códigos de barras
+        for row in ws.iter_rows(min_row=2):
+            if row[1].value and not str(row[1].value).startswith('---'):
+                row[1].number_format = '@'
+
+        wb.save(archivo_reporte)
+        print(f"\n✅ ¡Reporte de utilidad diaria generado con éxito desde la Nube!")
+        print(f"📁 Archivo Excel guardado como: '{archivo_reporte}'.")
+        print("---------------------------------------------------")
+        print(f"💵 Venta Bruta Total en Caja: ${total_recaudado:,.2f}")
+        print(f"💰 Utilidad Neta Real (Ganancia pura): ${total_utilidad_dia:,.2f}")
+        print("---------------------------------------------------")
+
+except Exception as e:
+    print(f"❌ Ocurrió un error al conectar con Supabase o generar el reporte: {e}")

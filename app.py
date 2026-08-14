@@ -1910,12 +1910,14 @@ elif menu == "⚠️ Control y Gestión de Inventario":
     with sub_tab1:
         st.markdown(f"### 🚦 Clasificación Automática de Vencimientos (Lotes Activos)")
       
-        archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
-       
-        if os.path.exists(archivo_lotes):
-            df_lotes_venc = pd.read_excel(archivo_lotes, dtype={'Código': str})
-        else:
-            df_lotes_venc = pd.DataFrame()
+        # --- CARGA DE LOTES DESDE SUPABASE ---
+        df_lotes_venc = pd.DataFrame()
+        try:
+            res_lotes_nube = supabase.table("lotes").select("*").eq("id_negocio", rut_actual).execute()
+            if res_lotes_nube.data:
+                df_lotes_venc = pd.DataFrame(res_lotes_nube.data)
+        except Exception as e:
+            st.error(f"⚠️ Error cargando lotes desde Supabase: {e}")
 
         if not df_lotes_venc.empty and 'FechaVencimiento' in df_lotes_venc.columns:
             roja, amarilla, verde = [], [], []
@@ -1968,8 +1970,7 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                 else:
                     st.caption("Sin productos próximos a vencer.")
         else:
-            st.info("ℹ️ Aún no hay registros de lotes con fecha de vencimiento guardados para este negocio.")
-
+            st.info("ℹ️ Aún no hay registros de lotes con fecha de vencimiento guardados en la nube para este negocio.")
     with sub_tab2:
         st.markdown(f"### 📦 Asistente de Reabastecimiento Automático (Lead Time configurado: {lead_time_dias} días)")
         if df_base is not None:

@@ -756,7 +756,7 @@ if not st.session_state.autenticado:
                     st.session_state.es_admin_dev = True
                     st.session_state.usuario_logueado = "Administrador Master"
                     st.session_state.negocio_actual = "admin_general"
-                    st.session_state.nombre_empresa = "ControlPRO Master"
+                    st.session_state.nombre_empresa = "CREC-ERP Master"
                     st.session_state.rol_usuario = "Administrador"
                     st.session_state.intentos_fallidos = 0
                     st.success("🛠️ ¡Acceso Maestro Autorizado!")

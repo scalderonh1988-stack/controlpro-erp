@@ -75,7 +75,7 @@ def guardar_nuevo_cliente(id_negocio, datos_cliente):
     # 1. Guardado en la Nube (Supabase)
     try:
         # Aseguramos que el RUT esté inyectado en el diccionario antes de subirlo
-        datos_cliente["rut"] = id_negocio
+        datos_cliente["id_negocio"] = id_negocio
         
         supabase.table("clientes").upsert(
             datos_cliente, 

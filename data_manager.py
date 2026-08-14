@@ -52,7 +52,8 @@ def cargar_maestro_clientes():
     devolviendo un diccionario para no romper la compatibilidad con el sistema anterior.
     """
     try:
-        respuesta = supabase.table("clientes").select("*").execute()
+        tenant_id = get_current_tenant()
+        respuesta = supabase.table("clientes").select("*").eq("id_negocio", tenant_id).execute()
         maestro = {}
         
         # Transformamos la lista de la nube al formato de diccionario {rut: datos}

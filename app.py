@@ -2687,7 +2687,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
         try:
             # Candado de seguridad: Filtramos estrictamente por el RUT del negocio activo
-            res_clientes = supabase.table("clientes").select("rut, nombre").eq("rut_empresa", rut_actual).execute()
+            res_clientes = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
             df_clientes_pos = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
             
             # Doble validación por si la columna de empresa en Supabase se llama distinto

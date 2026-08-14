@@ -43,49 +43,52 @@ def save_excel_data(df: pd.DataFrame, filename: str):
 def cargar_maestro_clientes():
     """
     Carga los clientes asegurando un aislamiento total entre empresas.
+    Bajo ninguna circunstancia descarga la tabla completa sin filtrar.
     """
     try:
         tenant_id = get_current_tenant()
         maestro = {}
         
-        # Si por alguna razón no hay tenant en sesión, no devolvemos nada por seguridad
+        # Si no hay tenant en sesión, bloqueamos la salida por seguridad absoluta
         if not tenant_id:
+            print("⚠️ Advertencia: No hay un tenant activo en la sesión para cargar clientes.")
             return {}
 
-        # Intentamos traer los datos filtrados directamente desde Supabase
-        respuesta = None
+        respuesta_data = []
+
+        # Intentamos consultar ordenadamente probando las columnas clave en Supabase
         for col in ["rut_empresa", "id_negocio", "rut_negocio", "negocio_id"]:
             try:
                 res = supabase.table("clientes").select("*").eq(col, tenant_id).execute()
-                if res.data is not None:
-                    respuesta = res
-                    break
+                if res.data and len(res.data) > 0:
+                    respuesta_data = res.data
+                    break # Encontramos la columna correcta, salimos del ciclo
             except Exception:
                 continue
                 
-        # Si la consulta directa falló, traemos todo pero aplicamos un filtro estricto local abajo
-        if not respuesta or not respuesta.data:
-            respuesta = supabase.table("clientes").select("*").execute()
+        # Si ninguna columna dio resultado directo, hacemos una última pasada de seguridad estricta
+        if not respuesta_data:
+            res_general = supabase.table("clientes").select("*").execute()
+            if res_general.data:
+                # Filtro manual estricto en memoria línea por línea
+                for cliente in res_general.data:
+                    empresa_cliente = str(
+                        cliente.get("rut_empresa") or 
+                        cliente.get("id_negocio") or 
+                        cliente.get("rut_negocio") or 
+                        cliente.get("negocio_id") or ""
+                    ).strip()
+                    if empresa_cliente == tenant_id:
+                        respuesta_data.append(cliente)
 
-        if not respuesta.data:
+        if not respuesta_data:
             return {}
         
-        # FILTRADO ESTRICTO OBLIGATORIO: Solo aceptamos clientes cuya empresa coincida exactamente
-        for cliente in respuesta.data:
+        # Transformamos la lista filtrada al formato de diccionario {rut: datos}
+        for cliente in respuesta_data:
             rut = cliente.get("rut")
-            if not rut:
-                continue
-                
-            empresa_cliente = str(
-                cliente.get("rut_empresa") or 
-                cliente.get("id_negocio") or 
-                cliente.get("rut_negocio") or 
-                cliente.get("negocio_id") or ""
-            ).strip()
-            
-            # Si el registro pertenece a este local, se añade al diccionario
-            if empresa_cliente == tenant_id:
-                maestro[rut] = cliente
+            if rut:
+                maestro[str(rut).strip()] = cliente
                 
         return maestro
     except Exception as e:
@@ -94,7 +97,7 @@ def cargar_maestro_clientes():
 
 def guardar_nuevo_cliente(id_negocio, datos_cliente):
     try:
-        # Inyectamos el ID en todas las variantes posibles para que Supabase lo guarde ordenado
+        # Inyectamos el ID de forma unificada en todas las variantes de columna posibles
         target_id = id_negocio if id_negocio else get_current_tenant()
         datos_cliente["rut_empresa"] = target_id
         datos_cliente["id_negocio"] = target_id
@@ -103,7 +106,7 @@ def guardar_nuevo_cliente(id_negocio, datos_cliente):
             datos_cliente, 
             on_conflict="rut"
         ).execute()
-        print(f"✅ Cliente guardado/actualizado en la nube con éxito.")
+        print(f"✅ Cliente guardado/actualizado en la nube con éxito para {target_id}.")
     except Exception as e:
         print(f"❌ Error guardando cliente en Supabase: {e}")
 

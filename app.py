@@ -97,8 +97,11 @@ url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
 supabase: Client = create_client(url, key)
 
-resultado = supabase.table("empresas").select("*").execute()
-empresas_data = resultado.data
+try:
+    resultado = supabase.table("empresas").select("*").execute()
+    empresas_data = resultado.data
+except:
+    empresas_data = []
 
 PROVEEDORES_FILE = os.path.join(CLIENTES_DIR, "maestro_proveedores.xlsx")
 
@@ -115,10 +118,9 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
         ruta_logo = os.path.join(tenant_dir, "logo_empresa.png")
         if os.path.exists(ruta_logo):
             try:
-                # Insertar la imagen en el PDF (coordenadas x=10, y=8, ancho=25mm)
                 pdf.image(ruta_logo, x=10, y=8, w=25)
             except Exception as e:
-                print(f"Error al cargar el logo en el PDF: {e}")
+                pass
 
     cfg = {}
     if tenant_dir:
@@ -195,7 +197,6 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
 
     df_cxp = pd.read_excel(archivo_cxp)
     
-    # --- CÁLCULO AUTOMÁTICO DE DÍAS DE ATRASO ---
     if not df_cxp.empty:
         col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
         
@@ -254,14 +255,11 @@ def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
     else:
         st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
 
-# --- FUNCIÓN CORREGIDA CONECTADA A SUPABASE ---
 def mostrar_modulo_registro_gastos(supabase):
     st.markdown("### 📋 Registro y Control de Gastos")
     
-    # Obtenemos el RUT del cliente actual
     rut_actual = st.session_state.get("negocio_seleccionado")
     
-    # --- FORMULARIO PARA REGISTRAR NUEVO GASTO ---
     with st.form("form_nuevo_gasto"):
         st.markdown("#### ➕ Registrar Nuevo Gasto o Egreso")
         col_g1, col_g2 = st.columns(2)
@@ -281,8 +279,6 @@ def mostrar_modulo_registro_gastos(supabase):
             if monto_g <= 0:
                 st.warning("⚠️ Debes ingresar un monto mayor a cero.")
             else:
-                # --- GUARDADO BLINDADO EN SUPABASE ---
-                # Unimos proveedor y descripción para guardarlo en la columna 'detalle'
                 texto_detalle = f"{proveedor_g} - {descripcion_g}" if proveedor_g else descripcion_g
                 
                 nuevo_gasto = {
@@ -304,7 +300,6 @@ def mostrar_modulo_registro_gastos(supabase):
     st.divider()
     st.markdown("### 📂 Historial de Gastos Registrados")
     
-    # --- LECTURA BLINDADA DESDE SUPABASE ---
     try:
         res = supabase.table("gastos").select("*").eq("rut_empresa", rut_actual).order("fecha", desc=True).execute()
         df_gastos = pd.DataFrame(res.data)
@@ -321,13 +316,11 @@ def mostrar_modulo_registro_gastos(supabase):
         st.divider()
         st.markdown("Revisa el detalle de cada gasto y utiliza el botón de la derecha para **eliminar** el registro en caso de error.")
 
-        # --- DIBUJAMOS LA LISTA CON LOS BOTONES DE BASURERO ---
         for idx, row in df_gastos.iterrows():
             c_info, c_btn = st.columns([10, 1])
             with c_info:
                 st.info(f"📅 **{row.get('fecha', '')}** | 📝 **{row.get('detalle', '')}** | 🏷️ {row.get('categoria', '')} | 💳 {row.get('metodo_pago', '')} | 📄 Fac/Bol: {row.get('documento', 'S/N')} | **Monto: ${float(row.get('monto', 0)):,.2f}**")
             with c_btn:
-                # Botón de eliminar conectado al ID indestructible de Supabase
                 if st.button("🗑️", key=f"del_gasto_{row.get('id')}", help="Eliminar este registro"):
                     try:
                         supabase.table("gastos").delete().eq("id", row.get('id')).execute()
@@ -411,13 +404,11 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
 
         st.divider()
         
-        # 🔘 Interruptor para mostrar u ocultar el bloque de cigarrillos
         aplicar_cigarros = st.toggle("🚬 ¿Aplicar control diferenciado para Cigarrillos / Exentos en este cierre?", value=True)
         
         cigarrillos_c = 0.0
         markup_cigarros = 0.0
 
-        # Si está encendido, mostramos dinámicamente el bloque en pantalla
         if aplicar_cigarros:
             st.markdown("#### 🚬 Control Específico de Cigarrillos")
             col_cig1, col_cig2 = st.columns(2)
@@ -426,7 +417,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             with col_cig2:
                 markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
 
-        # Cálculos de totales y fondos intocables
         ventas_generales = efectivo_c + transferencia_c + debito_c + otros_ingresos_c
         venta_total_calculada = ventas_generales + cigarrillos_c
 
@@ -554,7 +544,6 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
 
     with tab_cr2:
         st.markdown("### 🏦 Conciliación de Transacciones (Transbank / Bancos / Transferencias)")
-        st.info("ℹ️ Carga o revisa los abonos de tarjetas y transferencias para contrastarlos con tus ventas diarias registradas en el POS.")
         
         archivo_conciliacion = os.path.join(ruta_negocio, "Conciliacion_Bancaria.xlsx")
         if not os.path.exists(archivo_conciliacion):
@@ -581,8 +570,6 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
             else:
                 estado_conci = "Abono Mayor"
 
-            st.write(f"📊 **Diferencia Calculada:** ${diferencia_banco:,.2f} ({estado_conci})")
-
             if st.form_submit_button("💾 Guardar Validación Bancaria"):
                 nuevo_c = pd.DataFrame([{
                     'Fecha': str(f_conci),
@@ -607,67 +594,65 @@ def mostrar_modulo_conciliacion_retiros(ruta_negocio):
             else:
                 st.info("ℹ️ No hay registros de retiros todavía.")
 
+# --- CONEXIÓN DE REPORTES A SUPABASE ---
 def mostrar_modulo_reportes_avanzados(ruta_negocio):
     if st.button("⬅️ Volver al Home", use_container_width=True):
         st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
         st.rerun()
 
     st.markdown("### 📊 Módulo de Reportes e Inteligencia de Negocio")
-    st.info("📈 Analiza el rendimiento financiero, controla la salud de tus finanzas y exporta reportes clave para tu negocio.")
+    st.info("📈 Analiza el rendimiento financiero en tiempo real conectado a Supabase.")
 
-    # Rutas de archivos del negocio actual
-    archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
+    rut_actual = st.session_state.get("negocio_seleccionado")
+    fecha_hoy = date.today().strftime('%Y-%m-%d')
+    
+    # Lectura de Ventas y Gastos en la Nube
+    try:
+        res_ventas = supabase.table("ventas").select("monto").eq("rut_empresa", rut_actual).like("fecha", f"{fecha_hoy}%").execute()
+        total_ingresos_dia = sum([float(v['monto'] or 0) for v in res_ventas.data])
+    except:
+        total_ingresos_dia = 0.0
+
+    try:
+        res_gastos = supabase.table("gastos").select("monto, categoria").eq("rut_empresa", rut_actual).execute()
+        df_g = pd.DataFrame(res_gastos.data)
+        
+        # Filtramos solo los gastos de hoy para el balance
+        res_gastos_hoy = supabase.table("gastos").select("monto").eq("rut_empresa", rut_actual).like("fecha", f"{fecha_hoy}%").execute()
+        total_egresos_hoy = sum([float(g['monto'] or 0) for g in res_gastos_hoy.data])
+    except:
+        total_egresos_hoy = 0.0
+        df_g = pd.DataFrame()
+
     archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
     archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
-    archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
 
-    tab_r1, tab_r2, tab_r3, tab_r4 = st.tabs(["💰 Balance de Utilidades", "📈 Análisis de Gastos", "📑 Estado de Cartera", "📄 Exportar Informes PDF"])
+    tab_r1, tab_r2, tab_r3, tab_r4 = st.tabs(["💰 Balance de Hoy (Nube)", "📈 Análisis de Gastos (Nube)", "📑 Estado de Cartera", "📄 Exportar Informes PDF"])
 
     with tab_r1:
-        st.markdown("#### 💵 Resumen General de Ingresos vs. Gastos Operativos")
-        
-        total_ingresos_dia = 0.0
-        if os.path.exists(archivo_cuadratura):
-            df_cuat = pd.read_excel(archivo_cuadratura)
-            if not df_cuat.empty and 'VentaTotal' in df_cuat.columns:
-                total_ingresos_dia = df_cuat['VentaTotal'].sum()
-
-        total_egresos_gastos = 0.0
-        if os.path.exists(archivo_gastos):
-            df_gst = pd.read_excel(archivo_gastos)
-            if not df_gst.empty and 'Monto' in df_gst.columns:
-                total_egresos_gastos = df_gst['Monto'].sum()
-
-        utilidad_estimada = total_ingresos_dia - total_egresos_gastos
+        st.markdown("#### 💵 Resumen General de Ingresos vs. Gastos (Día Actual)")
+        utilidad_estimada = total_ingresos_dia - total_egresos_hoy
 
         col_rep1, col_rep2, col_rep3 = st.columns(3)
         with col_rep1:
-            st.metric(label="🪙 Ingresos Totales Registrados", value=f"${total_ingresos_dia:,.2f}")
+            st.metric(label="🪙 Ingresos Totales de Hoy", value=f"${total_ingresos_dia:,.2f}")
         with col_rep2:
-            st.metric(label="📉 Gastos Operativos Totales", value=f"${total_egresos_gastos:,.2f}")
+            st.metric(label="📉 Gastos Operativos Hoy", value=f"${total_egresos_hoy:,.2f}")
         with col_rep3:
             st.metric(label="💼 Margen Neto Operativo", value=f"${utilidad_estimada:,.2f}", delta="Estimado")
 
-        st.divider()
-        if os.path.exists(archivo_cuadratura) and not df_cuat.empty:
-            st.markdown("##### 📊 Histórico de Ingresos Diarios")
-            st.bar_chart(df_cuat.set_index('Fecha')['VentaTotal'] if 'Fecha' in df_cuat.columns else df_cuat['VentaTotal'])
-
     with tab_r2:
-        st.markdown("#### 📂 Desglose de Gastos por Categoría")
-        if os.path.exists(archivo_gastos):
-            df_g = pd.read_excel(archivo_gastos)
-            if not df_g.empty and 'Categoria' in df_g.columns and 'Monto' in df_g.columns:
-                gasto_por_cat = df_g.groupby('Categoria')['Monto'].sum().reset_index()
-                st.dataframe(gasto_por_cat, use_container_width=True)
-                st.bar_chart(gasto_por_cat.set_index('Categoria')['Monto'])
-            else:
-                st.info("ℹ️ No hay suficientes datos de categorías en los gastos registrados.")
+        st.markdown("#### 📂 Desglose Histórico de Gastos por Categoría")
+        if not df_g.empty and 'categoria' in df_g.columns and 'monto' in df_g.columns:
+            df_g['monto'] = pd.to_numeric(df_g['monto'], errors='coerce')
+            gasto_por_cat = df_g.groupby('categoria')['monto'].sum().reset_index()
+            st.dataframe(gasto_por_cat, use_container_width=True)
+            st.bar_chart(gasto_por_cat.set_index('categoria')['monto'])
         else:
-            st.info("ℹ️ Aún no hay un archivo de registros de gastos.")
+            st.info("ℹ️ No hay registros suficientes de gastos en la nube.")
 
     with tab_r3:
-        st.markdown("#### ⏳ Reporte de Cuentas por Cobrar y Atrasos")
+        st.markdown("#### ⏳ Reporte de Cuentas por Cobrar y Atrasos (Excel temporal)")
         if os.path.exists(archivo_cxp):
             df_cobrar = pd.read_excel(archivo_cxp)
             if not df_cobrar.empty:
@@ -689,15 +674,12 @@ def mostrar_modulo_reportes_avanzados(ruta_negocio):
 
     with tab_r4:
         st.markdown("#### 📄 Generación y Descarga de Informe Ejecutivo en PDF")
-        st.info("ℹ️ Crea un reporte formal consolidado con el resumen financiero, ingresos y gastos de tu negocio listo para descargar.")
-
         if st.button("🖨️ Generar Reporte Ejecutivo PDF", type="primary"):
             try:
                 pdf = FPDF(orientation='P', unit='mm', format='Letter')
                 pdf.add_page()
                 
-                # Encabezado del PDF
-                nombre_empresa_act = st.session_state.get('nombre_empresa', 'BOTILLERIA SAPIRON')
+                nombre_empresa_act = st.session_state.get('nombre_empresa', 'MI EMPRESA')
                 pdf.set_font("Arial", 'B', 14)
                 pdf.cell(0, 8, str(nombre_empresa_act), ln=True, align='C')
                 pdf.set_font("Arial", '', 10)
@@ -705,25 +687,20 @@ def mostrar_modulo_reportes_avanzados(ruta_negocio):
                 pdf.cell(0, 6, f"Fecha de Emisión: {date.today().strftime('%d/%m/%Y')}", ln=True, align='C')
                 pdf.ln(10)
 
-                # Resumen de cifras
                 pdf.set_font("Arial", 'B', 11)
-                pdf.cell(0, 8, "RESUMEN FINANCIERO", ln=True)
+                pdf.cell(0, 8, "RESUMEN FINANCIERO DEL DIA", ln=True)
                 pdf.set_font("Arial", '', 10)
                 
-                total_ing = total_ingresos_dia if 'total_ingresos_dia' in locals() else 0.0
-                total_egr = total_egresos_gastos if 'total_egresos_gastos' in locals() else 0.0
-                utilidad_rep = total_ing - total_egr
-
                 pdf.cell(100, 7, "Ingresos Totales Registrados:", border=1)
-                pdf.cell(90, 7, f"${total_ing:,.2f}", border=1, ln=True, align='R')
+                pdf.cell(90, 7, f"${total_ingresos_dia:,.2f}", border=1, ln=True, align='R')
                 pdf.cell(100, 7, "Gastos Operativos Totales:", border=1)
-                pdf.cell(90, 7, f"${total_egr:,.2f}", border=1, ln=True, align='R')
+                pdf.cell(90, 7, f"${total_egresos_hoy:,.2f}", border=1, ln=True, align='R')
                 pdf.cell(100, 7, "Margen Neto Operativo Estimado:", border=1)
-                pdf.cell(90, 7, f"${utilidad_rep:,.2f}", border=1, ln=True, align='R')
+                pdf.cell(90, 7, f"${utilidad_estimada:,.2f}", border=1, ln=True, align='R')
                 pdf.ln(10)
 
                 pdf.set_font("Arial", 'I', 9)
-                pdf.cell(0, 6, "Reporte generado automáticamente por ControlPRO ERP.", ln=True, align='C')
+                pdf.cell(0, 6, "Reporte generado automáticamente desde la Nube.", ln=True, align='C')
 
                 pdf_output_bytes = pdf.output(dest='S').encode('latin1')
 
@@ -755,7 +732,6 @@ if not st.session_state.autenticado:
     st.markdown('<p class="main-title">🔐 ControlPRO ERP - Acceso Blindado</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-title">Sistema protegido de gestión empresarial</p>', unsafe_allow_html=True)
  
-    # Control de intentos fallidos (Protección anti fuerza bruta básica)
     if st.session_state.intentos_fallidos >= 3:
         st.error("🚨 **Demasiados intentos fallidos.** El acceso temporalmente restringido por seguridad.")
         st.stop()
@@ -786,11 +762,10 @@ if not st.session_state.autenticado:
                     st.success("🛠️ ¡Acceso Maestro Autorizado!")
                     st.rerun()
                 else:
-                    # 2. Buscar empresa principal en Supabase con validación de licencia activa
+                    # 2. Buscar empresa principal en Supabase con validación de licencia
                     empresa_encontrada = next((emp for emp in empresas_data if str(emp.get("rut_empresa")) == usuario_limpio), None)
 
                     if empresa_encontrada:
-                        # Validar si la licencia está activa o expirada
                         licencia_activa_db = empresa_encontrada.get("licencia_activa", True)
                         
                         if licencia_activa_db:
@@ -809,31 +784,56 @@ if not st.session_state.autenticado:
                         else:
                             st.error("❌ La licencia de este negocio se encuentra expirada o inactiva.")
                     else:
-                        # 3. Buscar operador secundario en archivos locales seguros
+                        # 3. Buscar operador secundario en la nube (tabla 'usuarios' Supabase)
                         acceso_exitoso = False
-                        for neg_folder in os.listdir(CLIENTES_DIR):
-                            folder_path = os.path.join(CLIENTES_DIR, neg_folder)
-                            if os.path.isdir(folder_path):
-                                arch_usr = os.path.join(folder_path, "usuarios_negocio.json")
-                                if os.path.exists(arch_usr):
-                                    with open(arch_usr, "r", encoding="utf-8") as f:
-                                        diccionario_users = json.load(f)
-                                        if usuario_limpio in diccionario_users:
-                                            datos_usr = diccionario_users[usuario_limpio]
-                                            if str(datos_usr.get("password")) == password_limpio:
-                                                st.session_state.autenticado = True
-                                                st.session_state.es_admin_dev = False
-                                                st.session_state.negocio_actual = neg_folder
-                                                st.session_state.usuario_logueado = datos_usr.get("nombre", usuario_limpio)
-                                                st.session_state.rol_usuario = datos_usr.get("rol", "Cajero / Vendedor")
-                                                st.session_state.intentos_fallidos = 0
-                                                
-                                                emp_info = next((emp for emp in empresas_data if str(emp.get("rut_empresa")) == neg_folder), None)
-                                                st.session_state.nombre_empresa = emp_info.get("empresa_nombre") if emp_info else neg_folder
-                                                
-                                                st.success(f"🟢 ¡Bienvenido {st.session_state.usuario_logueado}!")
-                                                acceso_exitoso = True
-                                                st.rerun()
+                        try:
+                            # Intenta conectar a Supabase para buscar el usuario secundario
+                            res_usr = supabase.table("usuarios").select("*").eq("usuario", usuario_limpio).execute()
+                            if res_usr.data:
+                                datos_usr = res_usr.data[0]
+                                if str(datos_usr.get("password")) == password_limpio:
+                                    rut_negocio = datos_usr.get("rut_empresa")
+                                    st.session_state.autenticado = True
+                                    st.session_state.es_admin_dev = False
+                                    st.session_state.negocio_actual = rut_negocio
+                                    st.session_state.usuario_logueado = datos_usr.get("nombre", usuario_limpio)
+                                    st.session_state.rol_usuario = datos_usr.get("rol", "Cajero / Vendedor")
+                                    st.session_state.intentos_fallidos = 0
+                                    
+                                    emp_info = next((emp for emp in empresas_data if str(emp.get("rut_empresa")) == rut_negocio), None)
+                                    st.session_state.nombre_empresa = emp_info.get("empresa_nombre") if emp_info else rut_negocio
+                                    
+                                    st.success(f"🟢 ¡Bienvenido {st.session_state.usuario_logueado}!")
+                                    acceso_exitoso = True
+                                    st.rerun()
+                        except Exception as e:
+                            pass
+                            
+                        # Fallback local (Por si tienes cajeros que aún no has migrado a Supabase)
+                        if not acceso_exitoso:
+                            for neg_folder in os.listdir(CLIENTES_DIR):
+                                folder_path = os.path.join(CLIENTES_DIR, neg_folder)
+                                if os.path.isdir(folder_path):
+                                    arch_usr = os.path.join(folder_path, "usuarios_negocio.json")
+                                    if os.path.exists(arch_usr):
+                                        with open(arch_usr, "r", encoding="utf-8") as f:
+                                            diccionario_users = json.load(f)
+                                            if usuario_limpio in diccionario_users:
+                                                datos_usr = diccionario_users[usuario_limpio]
+                                                if str(datos_usr.get("password")) == password_limpio:
+                                                    st.session_state.autenticado = True
+                                                    st.session_state.es_admin_dev = False
+                                                    st.session_state.negocio_actual = neg_folder
+                                                    st.session_state.usuario_logueado = datos_usr.get("nombre", usuario_limpio)
+                                                    st.session_state.rol_usuario = datos_usr.get("rol", "Cajero / Vendedor")
+                                                    st.session_state.intentos_fallidos = 0
+                                                    
+                                                    emp_info = next((emp for emp in empresas_data if str(emp.get("rut_empresa")) == neg_folder), None)
+                                                    st.session_state.nombre_empresa = emp_info.get("empresa_nombre") if emp_info else neg_folder
+                                                    
+                                                    st.success(f"🟢 ¡Bienvenido {st.session_state.usuario_logueado}!")
+                                                    acceso_exitoso = True
+                                                    st.rerun()
                         
                         if not acceso_exitoso:
                             st.session_state.intentos_fallidos += 1
@@ -855,7 +855,6 @@ else:
     archivo_base = None
     archivo_compras = None
 
-# Sincronizamos la variable global requerida por otras funciones
 st.session_state.negocio_seleccionado = negocio_seleccionado
 
 # --- 6. BARRA LATERAL, PERMISOS Y MENÚ ÚNICO ---
@@ -869,37 +868,30 @@ if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
     st.session_state.es_admin_dev = False
     st.rerun()
 
-# --- 💳 BOTÓN DE PAGO FIJO PARA CLIENTES ---
 if not st.session_state.get("es_admin_dev", False):
-    st.sidebar.write("") # Un pequeño espacio visual
+    st.sidebar.write("") 
     st.sidebar.link_button("💳 Renovar Licencia Mensual", "https://mpago.la/2aRRK8q", type="primary", use_container_width=True)
-# -------------------------------------------
 
-# --- ⚠️ SISTEMA DE ALERTAS DE VENCIMIENTO PARA EL CLIENTE ---
 if not st.session_state.get("es_admin_dev", False):
     try:
         rut_actual = st.session_state.get("negocio_seleccionado") 
-        
         res_licencia = supabase.table("empresas").select("fecha_expiracion").eq("rut_empresa", rut_actual).execute()
         
         if res_licencia and res_licencia.data:
             fecha_exp_str = res_licencia.data[0].get("fecha_expiracion")
-            
             if fecha_exp_str and str(fecha_exp_str).strip() not in ["None", "NaT", "nan", ""]:
                 hoy = date.today()
                 fecha_exp_date = pd.to_datetime(str(fecha_exp_str)).date()
                 dias_restantes = (fecha_exp_date - hoy).days
                 
-                # Las alertas ahora solo muestran el texto (sin el botón, porque ya está fijo arriba)
                 if 0 < dias_restantes <= 5:
                     st.sidebar.warning(f"⚠️ **Atención:** Tu licencia expira en **{dias_restantes} días**.")
                 elif dias_restantes == 0:
-                    st.sidebar.error("🚨 **Último día:** Tu licencia expira **HOY**. Renueva para evitar cortes de servicio.")
+                    st.sidebar.error("🚨 **Último día:** Tu licencia expira **HOY**.")
                 elif dias_restantes < 0:
                     st.sidebar.error(f"🚫 **Licencia Expirada** hace {abs(dias_restantes)} días. Tu acceso será suspendido a la brevedad.")
     except Exception as e:
         pass
-# -------------------------------------------------------------
 
 st.sidebar.divider()
 
@@ -931,7 +923,7 @@ modulos_totales = [
 ]
 if st.session_state.get("es_admin_dev", False):
     modulos_totales.append("🔑 Control Maestro de Licencias")
-# --- LÓGICA DE PERFILES Y ROLES GRANULARES ---
+
 ROLES_PERMISOS = {
     "Administrador": modulos_totales,
     "Cajero / Vendedor": [
@@ -949,14 +941,11 @@ ROLES_PERMISOS = {
 }
 
 def obtener_modulos_permitidos(negocio_id, rol_usuario, es_dev):
-    """Filtra los módulos totales basándose en el rol del usuario y la licencia del negocio."""
     if es_dev:
         return modulos_totales
-    
     db_permisos = cargar_permisos()
     modulos_licencia_negocio = db_permisos.get(negocio_id, {mod: True for mod in modulos_totales})
     modulos_del_rol = ROLES_PERMISOS.get(rol_usuario, modulos_totales)
-    
     modulos_finales = [m for m in modulos_totales if modulos_licencia_negocio.get(m, True) and m in modulos_del_rol]
     return modulos_finales
 
@@ -988,8 +977,6 @@ if st.session_state.es_admin_dev:
                 id_negocio = st.text_input("ID Carpeta / RUT (ej: 77297004-8)", key="input_id_neg")
                 nombre_comercial = st.text_input("Nombre Comercial / Razón Social", key="input_nom_neg")
                 password_cliente = st.text_input("Contraseña / RUT", type="password", key="input_pass_neg")
-                
-                # 👇 CALENDARIO PARA ASIGNAR FECHA MANUAL AL CREAR CLIENTE 👇
                 fecha_exp = st.date_input("Fecha de Expiración Inicial", value=date(2026, 12, 31), key="input_fech_neg")
                
                 guardar_nuevo = st.form_submit_button("💾 Crear y Guardar Negocio")
@@ -998,7 +985,6 @@ if st.session_state.es_admin_dev:
                     if not id_negocio or not nombre_comercial:
                         st.warning("⚠️ Debes completar el ID y el Nombre.")
                     else:
-                        # 1. Guarda la carpeta local y JSON con la fecha del calendario
                         datos_nuevo = {
                             "nombre": nombre_comercial,
                             "password": password_cliente,
@@ -1012,7 +998,6 @@ if st.session_state.es_admin_dev:
                         db_permisos[id_negocio] = {mod: True for mod in modulos_totales}
                         guardar_permisos(db_permisos)
                         
-                        # 2. Inyecta automáticamente el nuevo cliente en Supabase para el Control Maestro
                         try:
                             supabase.table("empresas").insert({
                                 "rut_empresa": id_negocio,
@@ -1021,7 +1006,7 @@ if st.session_state.es_admin_dev:
                                 "licencia_activa": True
                             }).execute()
                         except Exception as e:
-                            pass # Si ya existe en Supabase o hay un error menor, no detiene el proceso local
+                            pass 
                         
                         st.success(f"✨ ¡Negocio '{nombre_comercial}' creado y sincronizado con Supabase!")
                         st.rerun()
@@ -1030,10 +1015,7 @@ if st.session_state.es_admin_dev:
             st.markdown("#### 🧹 Reseteo y Limpieza Remota")
             negocio_a_limpiar = st.selectbox("Selecciona Negocio a Gestionar:", negocios_disponibles, key="limpiar_negocio_sel_nico")
             dir_cliente_objetivo = os.path.join(CLIENTES_DIR, negocio_a_limpiar)
-
-            st.warning("⚠️ **Zona de Peligro:** La opción de fábrica eliminará todos los registros de ventas, gastos, inventario y documentos de este negocio.")
-
-            # 🔐 Checkbox de doble confirmación de seguridad
+            st.warning("⚠️ **Zona de Peligro:** La opción de fábrica eliminará todos los registros locales.")
             confirmar_borrado = st.checkbox("Confirmo que deseo restablecer este negocio a versión de fábrica", key="chk_confirmar_fabrica")
 
             if st.button("🚨 Restablecer a Versión de Fábrica (Borrar Todo)", type="primary", key="btn_version_fabrica"):
@@ -1042,24 +1024,19 @@ if st.session_state.es_admin_dev:
                 else:
                     try:
                         import shutil
-                        # 1. Eliminar todos los archivos de Excel y configuraciones de prueba del cliente
                         for archivo in os.listdir(dir_cliente_objetivo):
                             ruta_archivo = os.path.join(dir_cliente_objetivo, archivo)
                             if os.path.isfile(ruta_archivo) and archivo != "logo_empresa.png":
                                 os.remove(ruta_archivo)
-                        
-                        # 2. Eliminar las carpetas de archivadores de documentos
                         for carpeta_sub in ["archivador_ventas", "archivador_compras"]:
                             dir_sub = os.path.join(dir_cliente_objetivo, carpeta_sub)
                             if os.path.exists(dir_sub):
                                 shutil.rmtree(dir_sub)
-
                         st.success(f"✨ ¡Negocio '{negocio_a_limpiar}' restablecido a versión de fábrica con éxito!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ocurrió un error al restablecer: {e}")
 
-# 📌 Créditos al desarrollador en el footer de la barra lateral
 st.sidebar.markdown("---")
 st.sidebar.markdown("© 2026 ControlPRO ERP")
 st.sidebar.markdown("Desarrollado por **Sebastián Calderón**")
@@ -1067,40 +1044,28 @@ st.sidebar.markdown("Desarrollado por **Sebastián Calderón**")
 # --- 7. INICIALIZACIÓN DE ESTADOS DE SESIÓN ---
 if "menu_seleccionado" not in st.session_state:
     st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
-
 if "carrito_ventas" not in st.session_state:
     st.session_state.carrito_ventas = []
-
 if "ejecutar_cobro" not in st.session_state:
     st.session_state.ejecutar_cobro = False
-
 if "estado_pago" not in st.session_state:
     st.session_state.estado_pago = False
-
 if "ultimo_recibo" not in st.session_state:
     st.session_state.ultimo_recibo = None
-
 if "formas_pago_erp" not in st.session_state:
     st.session_state.formas_pago_erp = [
-        "Efectivo",
-        "Tarjeta de Débito",
-        "Tarjeta de Crédito",
-        "Transferencia Electrónica",
-        "Cheque",
-        "Cuenta Corriente / Crédito Directo"
+        "Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito", 
+        "Transferencia Electrónica", "Cheque", "Cuenta Corriente / Crédito Directo"
     ]
 
-# Obtener módulos permitidos combinando licencias y perfiles
 rol_actual = st.session_state.get('rol_usuario', 'Administrador')
 lista_modulos_permitidos = obtener_modulos_permitidos(negocio_seleccionado, rol_actual, st.session_state.es_admin_dev)
-# 🛡️ Forzar acceso exclusivo al Admin saltando los filtros de permisos
 if st.session_state.get("es_admin_dev", False) and "🔑 Control Maestro de Licencias" not in lista_modulos_permitidos:
     lista_modulos_permitidos.append("🔑 Control Maestro de Licencias")
 
 if not lista_modulos_permitidos:
     lista_modulos_permitidos = ["🏠 Home / Bienvenida"]
 
-# SELECTOR ÚNICO DE MÓDULOS
 menu = st.sidebar.selectbox(
     "🧭 Selecciona un Módulo:",
     lista_modulos_permitidos,
@@ -1193,10 +1158,14 @@ elif menu == "📦 Inventario y Productos":
     
     with tab_inv1:
         st.markdown("#### ➕ Registrar o Gestionar Productos")
-        if archivo_base and os.path.exists(archivo_base):
-            st.success(f"Base de datos conectada con éxito.")
-            df_inv = pd.read_excel(archivo_base, dtype={'Código': str})
-            st.dataframe(df_inv, use_container_width=True)
+        rut_actual = st.session_state.get("negocio_seleccionado")
+        
+        try:
+            res_inv = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).execute()
+            df_inv = pd.DataFrame(res_inv.data)
+            st.success(f"Base de datos conectada con éxito desde la Nube. ({len(df_inv)} productos)")
+            if not df_inv.empty:
+                st.dataframe(df_inv, use_container_width=True)
             
             with st.form("form_nuevo_producto", clear_on_submit=True):
                 st.markdown("##### Nuevo Producto")
@@ -1211,20 +1180,19 @@ elif menu == "📦 Inventario y Productos":
                     if not c_cod or not c_desc:
                         st.warning("⚠️ Ingresa el código y la descripción.")
                     else:
-                        nuevo_p = pd.DataFrame([{
-                            'Código': str(c_cod),
-                            'Descripción': c_desc,
-                            'Costo': c_costo,
-                            'Precio de Venta': c_pv,
-                            'Stock': c_stock,
-                            'Activo': 'Si'
-                        }])
-                        df_act = pd.concat([df_inv, nuevo_p], ignore_index=True)
-                        df_act.to_excel(archivo_base, index=False)
-                        st.success("✅ ¡Producto registrado con éxito!")
+                        nuevo_p = {
+                            "rut_empresa": rut_actual,
+                            "codigo": str(c_cod),
+                            "descripcion": c_desc,
+                            "costo": c_costo,
+                            "precio_venta": c_pv,
+                            "stock": c_stock
+                        }
+                        supabase.table("productos").upsert(nuevo_p, on_conflict="rut_empresa, codigo").execute()
+                        st.success("✅ ¡Producto registrado con éxito en la Nube!")
                         st.rerun()
-        else:
-            st.warning("⚠️ No se encontró la base de datos de productos para este negocio.")
+        except Exception as e:
+            st.error(f"⚠️ Error al conectar con Supabase: {e}")
 
     with tab_inv2:
         st.markdown("#### 👥 Maestro de Clientes")
@@ -1315,7 +1283,6 @@ elif menu == "📊 Dashboard Ejecutivo":
             index=3
         )
 
-    # Definir la fecha límite según el filtro elegido
     hoy_dt = pd.to_datetime(date.today())
     if periodo_seleccionado == "Diaria (Hoy)":
         fecha_limite = hoy_dt
@@ -1328,7 +1295,6 @@ elif menu == "📊 Dashboard Ejecutivo":
     else:
         fecha_limite = None
 
-    # Rutas y archivos del negocio actual
     archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx")
     archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
     archivo_cpp = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
@@ -1342,7 +1308,6 @@ elif menu == "📊 Dashboard Ejecutivo":
             path_v = os.path.join(ruta_negocio, ar)
             df_temp_v = pd.read_excel(path_v)
             if not df_temp_v.empty:
-                # Filtrar por fecha si existe columna temporal
                 col_fecha = next((c for c in df_temp_v.columns if 'fecha' in str(c).lower() or 'timestamp' in str(c).lower()), None)
                 if col_fecha and fecha_limite is not None:
                     df_temp_v['Fecha_Parsed'] = pd.to_datetime(df_temp_v[col_fecha], errors='coerce')
@@ -1375,17 +1340,23 @@ elif menu == "📊 Dashboard Ejecutivo":
             
             total_gastos_periodo = df_g_filtrado['Monto'].sum()
 
-    # 3. Cálculo de Inventario y Ganancia Potencial (Estructural del Negocio)
-    if df_base is not None and not df_base.empty:
-        df_base['Costo'] = pd.to_numeric(df_base['Costo'], errors='coerce').fillna(0)
-        df_base['Precio de Venta'] = pd.to_numeric(df_base['Precio de Venta'], errors='coerce').fillna(0)
-        df_base['Stock'] = pd.to_numeric(df_base['Stock'], errors='coerce').fillna(0)
+    # 3. Cálculo de Inventario y Ganancia Potencial desde la Nube
+    try:
+        res_prod = supabase.table("productos").select("costo, precio_venta, stock").eq("rut_empresa", st.session_state.negocio_seleccionado).execute()
+        if res_prod.data:
+            df_prod_nube = pd.DataFrame(res_prod.data)
+            df_prod_nube['costo'] = pd.to_numeric(df_prod_nube['costo'], errors='coerce').fillna(0)
+            df_prod_nube['precio_venta'] = pd.to_numeric(df_prod_nube['precio_venta'], errors='coerce').fillna(0)
+            df_prod_nube['stock'] = pd.to_numeric(df_prod_nube['stock'], errors='coerce').fillna(0)
 
-        inversion_total = (df_base['Costo'] * df_base['Stock']).sum()
-        valor_venta_total = (df_base['Precio de Venta'] * df_base['Stock']).sum()
-        ganancia_potencial = valor_venta_total - inversion_total
-        total_productos = len(df_base)
-    else: 
+            inversion_total = (df_prod_nube['costo'] * df_prod_nube['stock']).sum()
+            valor_venta_total = (df_prod_nube['precio_venta'] * df_prod_nube['stock']).sum()
+            ganancia_potencial = valor_venta_total - inversion_total
+            total_productos = len(df_prod_nube)
+        else:
+            inversion_total = valor_venta_total = ganancia_potencial = 0.0
+            total_productos = 0
+    except Exception as e:
         inversion_total = valor_venta_total = ganancia_potencial = 0.0
         total_productos = 0
 
@@ -1393,7 +1364,7 @@ elif menu == "📊 Dashboard Ejecutivo":
 
     st.divider()
 
-    # --- BLOQUE DE KPIS SUPERIORES (Dinámicos según el filtro) ---
+    # --- BLOQUE DE KPIS SUPERIORES ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(label=f"💰 Venta ({periodo_seleccionado.split()[0]})", value=f"${total_ventas_periodo:,.2f}")
@@ -1453,19 +1424,16 @@ elif menu == "📊 Dashboard Ejecutivo":
             * **Equilibrio sano:** Lo ideal en tu negocio es que la porción más grande de esta gráfica sea siempre la **Mercadería**, ya que esa es la inversión que te generará ventas y ganancias reales.
             """)
         if not df_g_filtrado.empty and 'Categoria' in df_g_filtrado.columns and 'Monto' in df_g_filtrado.columns:
-            # Agrupamos los datos igual que antes
             df_cat = df_g_filtrado.groupby('Categoria')['Monto'].sum().reset_index()
             
-            # --- NUEVO GRÁFICO DE DONA CON PLOTLY ---
             fig_dona = px.pie(
                 df_cat, 
                 values='Monto', 
                 names='Categoria', 
-                hole=0.65, # Grosor de la dona
+                hole=0.65,
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             
-            # Diseño moderno y tooltip interactivo
             fig_dona.update_traces(
                 textposition='inside', 
                 textinfo='percent', 
@@ -1476,13 +1444,11 @@ elif menu == "📊 Dashboard Ejecutivo":
                 showlegend=True,
                 legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
                 margin=dict(t=10, b=10, l=0, r=0),
-                paper_bgcolor="rgba(0,0,0,0)", # Fondo transparente para que combine con tu tema
+                paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
             )
             
-            # Renderizamos el nuevo gráfico
             st.plotly_chart(fig_dona, use_container_width=True)
-            # ----------------------------------------
         else:
             st.info("ℹ️ No hay registros de gastos para el período seleccionado.")
 
@@ -1511,25 +1477,18 @@ elif menu == "📊 Dashboard Ejecutivo":
 elif menu == "📦 Inventario y Productos":
     mostrar_encabezado_con_home("Gestión de Bases de Datos")
    
-    # Creamos pestañas internas para separar cada base de datos limpiamente
     tab_prod, tab_cli, tab_prov = st.tabs(["📦 Productos / Inventario", "👥 Clientes", "🚚 Proveedores"])
    
     with tab_prod:
-        st.markdown("### 📦 Administración de Productos")
-        if df_base is not None:
-            st.success(f"✅ Base de datos conectada con éxito. Total de productos registrados: {len(df_base)}")
+        st.markdown("### 📦 Administración de Productos (Nube)")
+        rut_actual = st.session_state.get("negocio_seleccionado")
+        try:
+            res_inv2 = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).execute()
+            df_base_nube = pd.DataFrame(res_inv2.data)
+            st.success(f"✅ Base de datos conectada con éxito. Total de productos registrados: {len(df_base_nube)}")
            
-            # Si prefieres mostrar los productos con el mismo diseño tabular detallado y botones de eliminar:
             st.markdown("#### 📂 Listado General de Inventario")
-            if not df_base.empty:
-                # Detectamos columnas de forma automática
-                c_cod = next((c for c in df_base.columns if 'código' in str(c).lower() or 'codigo' in str(c).lower() or 'ean' in str(c).lower()), df_base.columns[0])
-                c_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower() or 'producto' in str(c).lower()), df_base.columns[1])
-                c_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower()), None)
-                c_precio = next((c for c in df_base.columns if 'precio' in str(c).lower() or 'venta' in str(c).lower()), None)
-                c_costo = next((c for c in df_base.columns if 'costo' in str(c).lower()), None)
-
-                # Cabeceras visuales de la tabla
+            if not df_base_nube.empty:
                 h1, h2, h3, h4, h5, h6 = st.columns([2, 3, 1, 1, 1, 0.8])
                 with h1: st.markdown("**Código**")
                 with h2: st.markdown("**Descripción**")
@@ -1539,12 +1498,12 @@ elif menu == "📦 Inventario y Productos":
                 with h6: st.markdown("**Acción**")
                 st.markdown("---")
 
-                for idx_p, row_p in df_base.iterrows():
-                    val_cod = str(row_p.get(c_cod, ''))
-                    val_desc = str(row_p.get(c_desc, ''))
-                    val_costo = float(row_p.get(c_costo, 0)) if c_costo and pd.notna(row_p.get(c_costo, 0)) else 0.0
-                    val_precio = float(row_p.get(c_precio, 0)) if c_precio and pd.notna(row_p.get(c_precio, 0)) else 0.0
-                    val_stock = row_p.get(c_stock, 0) if c_stock else 0
+                for idx_p, row_p in df_base_nube.iterrows():
+                    val_cod = str(row_p.get('codigo', ''))
+                    val_desc = str(row_p.get('descripcion', ''))
+                    val_costo = float(row_p.get('costo', 0))
+                    val_precio = float(row_p.get('precio_venta', 0))
+                    val_stock = float(row_p.get('stock', 0))
 
                     c1, c2, c3, c4, c5, c6 = st.columns([2, 3, 1, 1, 1, 0.8])
                     with c1: st.write(val_cod)
@@ -1553,20 +1512,18 @@ elif menu == "📦 Inventario y Productos":
                     with c4: st.write(f"${val_precio:,.0f}")
                     with c5: st.write(str(val_stock))
                     with c6:
-                        if st.button("🗑️", key=f"del_prod_inv_{idx_p}", help="Eliminar este producto"):
-                            df_base_act = df_base.drop(idx_p).reset_index(drop=True)
-                            df_base_act.to_excel(archivo_base, index=False)
-                            st.success("✅ Producto eliminado correctamente.")
+                        if st.button("🗑️", key=f"del_prod_inv2_{val_cod}", help="Eliminar este producto"):
+                            supabase.table("productos").delete().eq("rut_empresa", rut_actual).eq("codigo", val_cod).execute()
+                            st.success("✅ Producto eliminado correctamente de la Nube.")
                             st.rerun()
             else:
                 st.info("ℹ️ No hay productos cargados en la base de datos.")
-        else:
-            st.error(f"⚠️ No se encontró el archivo de base de datos en la carpeta del negocio '{negocio_seleccionado}'.")
+        except Exception as e:
+            st.error(f"⚠️ Error conectando con la base de datos: {e}")
        
     with tab_cli:
         st.markdown("### 👥 Administración de Clientes")
        
-        # Formulario de Registro de Nuevo Cliente
         with st.form("form_nuevo_cliente", clear_on_submit=True):
             st.markdown("#### Registrar Nuevo Cliente")
             col1, col2 = st.columns(2)
@@ -1611,7 +1568,6 @@ elif menu == "📦 Inventario y Productos":
                 else:
                     st.warning("⚠️ Los campos RUT y Nombre/Razón Social son obligatorios.")
 
-        # Visualización de la Base de Datos de Clientes
         st.markdown("#### 📋 Listado de Clientes Registrados")
         path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
         try:
@@ -1626,7 +1582,6 @@ elif menu == "📦 Inventario y Productos":
     with tab_prov:
         st.markdown("### 🚚 Administración de Proveedores")
        
-        # Formulario de Registro de Nuevo Proveedor
         with st.form("form_nuevo_proveedor", clear_on_submit=True):
             st.markdown("#### Registrar Nuevo Proveedor")
             col1, col2 = st.columns(2)
@@ -1671,7 +1626,6 @@ elif menu == "📦 Inventario y Productos":
                 else:
                     st.warning("⚠️ Los campos RUT y Nombre/Razón Social del proveedor son obligatorios.")
 
-        # Visualización de la Base de Datos de Proveedores
         st.markdown("#### 📋 Listado de Proveedores Registrados")
         path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
         try:
@@ -1696,7 +1650,6 @@ elif menu == "📉 Mermas y Ajustes":
         if col_stock:
             st.markdown("### 📋 Registro de Salida por Merma o Ajuste")
 
-            # Método de búsqueda similar al de compras/ventas
             metodo_busqueda_merma = st.radio("Método para buscar producto:", ["⌨️ Escáner / Pistola Láser (Código)", "🔎 Buscar por Nombre / Palabra Clave"], horizontal=True, key="radio_merma")
            
             prod_seleccionado_merma = None
@@ -1714,7 +1667,6 @@ elif menu == "📉 Mermas y Ajustes":
             else:
                 prod_seleccionado_merma = st.selectbox("Selecciona o busca por palabra clave:", options=opciones_productos_merma, key="select_palabra_merma")
 
-            # Formulario de registro de merma
             with st.form("form_registrar_merma"):
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
@@ -1724,7 +1676,6 @@ elif menu == "📉 Mermas y Ajustes":
 
                 observacion_merma = st.text_input("Observación opcional (Ej: Rotura en pasillo, vencido del semáforo)")
 
-                # Verificamos si el producto tiene lotes activos para ofrecer seleccionarlo
                 lotes_disponibles_prod = []
                 codigo_p_merma = prod_seleccionado_merma.split(" - ")[0] if prod_seleccionado_merma and prod_seleccionado_merma != "-- Selecciona un producto --" else ""
                
@@ -1748,10 +1699,8 @@ elif menu == "📉 Mermas y Ajustes":
                     elif cant_merma <= 0:
                         st.warning("⚠️ La cantidad debe ser mayor a 0.")
                     else:
-                        # Extraer código y descripción
                         desc_p_merma = prod_seleccionado_merma.split(" - ")[1]
 
-                        # 1. Descontar del stock general de la base de datos de productos
                         match_prod_b = df_base[df_base[col_cod].astype(str) == str(codigo_p_merma)]
                         if not match_prod_b.empty:
                             idx_b = match_prod_b.index[0]
@@ -1761,10 +1710,8 @@ elif menu == "📉 Mermas y Ajustes":
                             df_base.at[idx_b, col_stock] = nuevo_stock_b
                             df_base.to_excel(archivo_base, index=False)
 
-                        # 2. Descontar del lote específico si aplica
                         lote_limpio = "N/A"
                         if lotes_disponibles_prod and lote_seleccionado_str:
-                            # Extraer el nombre del lote del texto seleccionado (Ej: "Lote: LOTE-001 (Disponibles...")
                             import re
                             match_lote_ext = re.search(r'Lote:\s*(.*?)\s*\(Disponibles', lote_seleccionado_str)
                             if match_lote_ext:
@@ -1779,7 +1726,6 @@ elif menu == "📉 Mermas y Ajustes":
                                     df_lotes_up.at[idx_l, 'CantidadDisponible'] = max(0.0, cant_dispo_lote - cant_merma)
                                     df_lotes_up.to_excel(archivo_lotes, index=False)
 
-                        # 3. Guardar el registro en el historial de mermas (base_mermas.xlsx)
                         archivo_mermas = os.path.join(ruta_negocio, "base_mermas.xlsx") if 'ruta_negocio' in globals() else "base_mermas.xlsx"
                         nuevo_reg_merma = pd.DataFrame([{
                             "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1800,7 +1746,6 @@ elif menu == "📉 Mermas y Ajustes":
                         st.success(f"✅ ¡Merma registrada con éxito! Se descontaron {cant_merma} unidades de '{desc_p_merma}'.")
                         st.rerun()
 
-            # Mostrar historial reciente de mermas del negocio
             archivo_mermas_ver = os.path.join(ruta_negocio, "base_mermas.xlsx") if 'ruta_negocio' in globals() else "base_mermas.xlsx"
             if os.path.exists(archivo_mermas_ver):
                 st.divider()
@@ -1819,7 +1764,6 @@ elif menu == "📉 Mermas y Ajustes":
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero y Gastos")
    
-    # Creamos las 3 pestañas internas idénticas al estilo de inventario
     tab_fin1, tab_fin2, tab_fin3 = st.tabs([
         "💳 Cuentas por Pagar",
         "📅 Calendario de Pagos",
@@ -1887,7 +1831,6 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
 elif menu == "⚠️ Control y Gestión de Inventario":
     mostrar_encabezado_con_home("⚠️ Panel de Control Operativo y Alertas de Inventario")
   
-    # ⚙️ PANEL DE PARAMETRIZACIÓN OPERATIVA MANUAL
     with st.expander("⚙️ Configurar Parámetros de Operación e Inventario", expanded=False):
         st.markdown("Ajusta los valores operativos según la logística y tiempos de tu negocio:")
         col_p1, col_p2, col_p3, col_p4 = st.columns(4)
@@ -1935,7 +1878,6 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                             "Días Restantes": dias
                         }
                        
-                        # Rangos dinámicos basados en los parámetros del usuario
                         if dias <= dias_alerta_roja:
                             roja.append(item)
                         elif dias_alerta_roja < dias <= (dias_alerta_roja + 8):
@@ -1998,14 +1940,12 @@ elif menu == "⚠️ Control y Gestión de Inventario":
         else:
             st.error("⚠️ Falta la base de datos.")
 
-    with tab3:
+    with sub_tab3:
         st.markdown("### 🖨️ Datos del Comprobante e Impresión")
-        # [Aquí va tu formulario de configuración de ticket existente...]
 
         st.markdown("---")
         st.markdown("### 🖼️ Logotipo de la Empresa")
         
-        # Validar que exista un negocio seleccionado válido
         if negocio_seleccionado and negocio_seleccionado != "admin_general":
             tenant_dir_logo = os.path.join(CARPETA_CLIENTES, str(negocio_seleccionado))
             ruta_logo_final = os.path.join(tenant_dir_logo, "logo_empresa.png")
@@ -2017,14 +1957,12 @@ elif menu == "⚠️ Control y Gestión de Inventario":
             
             if logo_cargado is not None:
                 try:
-                    # Asegurar que la carpeta del cliente exista físicamente
                     os.makedirs(tenant_dir_logo, exist_ok=True)
                     
                     img = Image.open(logo_cargado)
                     if img.mode != 'RGB':
                         img = img.convert('RGB')
                     
-                    # Guardar la imagen procesada
                     img.save(ruta_logo_final, "PNG")
                     st.success("✅ ¡Logotipo procesado y actualizado con éxito!")
                     st.rerun()
@@ -2288,7 +2226,6 @@ elif menu == "🛒 Registrar Compra (CPP)":
 
                                     procesados += 1
 
-                            # Registrar en Gastos
                             archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx") if 'ruta_negocio' in globals() else "Registro_Gastos.xlsx"
                             nuevo_gasto = pd.DataFrame([{
                                 'Fecha_Hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -2304,7 +2241,6 @@ elif menu == "🛒 Registrar Compra (CPP)":
                             else:
                                 nuevo_gasto.to_excel(archivo_gastos, index=False)
 
-                            # Registrar en Cuentas por Pagar si aplica
                             if condicion_pago in ["Crédito", "Cheque"]:
                                 archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx") if 'ruta_negocio' in globals() else "Cuentas_Por_Pagar.xlsx"
                                 nueva_cuenta = pd.DataFrame([{
@@ -2320,7 +2256,6 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                     pd.concat([df_cuentas_ant, nueva_cuenta], ignore_index=True).to_excel(archivo_cuentas, index=False)
                                 else:
                                     nueva_cuenta.to_excel(archivo_cuentas, index=False)
-
                             # 🗂️ ARCHIVADOR AUTOMÁTICO GRC (Subdirectorio)
                             try:
                                 dir_arch_grc = os.path.join(ruta_negocio, "archivador_compras", "grc")
@@ -2550,7 +2485,6 @@ elif menu == "⚙️ Configuración General":
     ruta_config_json = os.path.join(tenant_dir, "config_ticket.json")
     ruta_usuarios_local = os.path.join(tenant_dir, "usuarios_negocio.json")
 
-    # Funciones auxiliares para manejo local de usuarios
     def cargar_usuarios_local(path):
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
@@ -2561,7 +2495,6 @@ elif menu == "⚙️ Configuración General":
         with open(path, "w", encoding="utf-8") as f:
             json.dump(datos, f, indent=4, ensure_ascii=False)
 
-    # 🔄 Validar y recargar la configuración si cambia el negocio seleccionado
     if "ultimo_negocio_config" not in st.session_state or st.session_state.ultimo_negocio_config != negocio_seleccionado:
         st.session_state.ultimo_negocio_config = negocio_seleccionado
         if os.path.exists(ruta_config_json):
@@ -2638,7 +2571,6 @@ elif menu == "⚙️ Configuración General":
             rut = st.text_input("RUT", value=st.session_state.config_ticket.get("rut_empresa", ""))
             direccion = st.text_input("Dirección", value=st.session_state.config_ticket.get("direccion", ""))
            
-            # 📌 Tasa de IVA personalizable (Ej: 22% para Uruguay o 19% por defecto)
             iva_personalizado = st.number_input("Tasa de IVA Local (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.config_ticket.get("iva_tasa", 19.0)), step=1.0)
            
             pie = st.text_input("Pie de Página", value=st.session_state.config_ticket.get("pie_pagina", ""))
@@ -2733,14 +2665,14 @@ elif menu == "⚙️ Configuración General":
                 except Exception as e:
                     st.error(f"❌ Ocurrió un error al procesar el archivo: {e}")
 
-# ----------------- SECCIÓN VENTAS / POS RÁPIDO -----------------
+# ----------------- SECCIÓN VENTAS / POS RÁPIDO (CONECTADO A LA NUBE) -----------------
 elif menu == "💰 Módulo de Ventas (POS)":
     caja_actual = param_caja if param_caja else "Caja Principal"
+    rut_actual = st.session_state.get("negocio_seleccionado")
     mostrar_encabezado_con_home(f"Terminal de Ventas - {caja_actual}")
 
     tipo_documento = st.selectbox("Selecciona el documento:", ["Boleta Electrónica", "Factura Electrónica", "Guía de Despacho"])
     
-    # ⚙️ Selector de modo de trabajo del inventario en el POS
     modo_inventario = st.radio(
         "📦 Modo de trabajo del POS:",
         ["Control Estricto de Stock (Alerta si no hay inventario)", "Venta Libre / Solo Base de Datos"],
@@ -2751,7 +2683,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
 
     cliente_nombre, cliente_rut = "", ""
 
-    # 1. Lógica de Selección de Clientes (Solo para Factura/Guía)
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
         archivo_clientes_pos = os.path.join(ruta_negocio, "Maestro_Clientes.xlsx")
         df_clientes_pos = pd.DataFrame()
@@ -2779,7 +2710,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
             with col_f1: cliente_nombre = st.text_input("Razón Social / Nombre del Cliente")
             with col_f2: cliente_rut = st.text_input("RUT / Identificación Tributaria")
 
-    # 2. Visualización de Resultado de Venta (Transacción Completada)
     if st.session_state.ultimo_recibo is not None:
         st.success("🎉 ¡Transacción completada y archivada con éxito!")
         st.markdown(f'<div class="ticket-box">{st.session_state.ultimo_recibo}</div>', unsafe_allow_html=True)
@@ -2804,7 +2734,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
                 st.session_state.carrito_ventas = []
                 st.rerun()
 
-    # 3. Flujo de Formas de Pago
     elif st.session_state.estado_pago:
         st.markdown("### 💳 2. Formas de Pago")
         if len(st.session_state.carrito_ventas) > 0:
@@ -2835,14 +2764,51 @@ elif menu == "💰 Módulo de Ventas (POS)":
             with col_p2:
                 if st.button("✅ Confirmar Pago y Generar", use_container_width=True, type="primary"):
                     if forma_pago == "Efectivo" and efectivo_recibido < total_venta:
-                        st.warning("⚠️ Monto insuficiente.")
+                        st.warning("⚠️ Monto insuficiente para procesar la venta.")
                     else:
                         fecha_hora_actual = datetime.now()
+                        transaccion_id_actual = f"TX_{fecha_hora_actual.strftime('%Y%m%d%H%M%S')}"
                         registros_nuevos, lineas_productos = [], ""
+                        
+                        # --- ☁️ SINCRONIZACIÓN CON SUPABASE: DESCUENTO DE STOCK Y REGISTRO DE VENTA ---
                         for item in st.session_state.carrito_ventas:
                             lineas_productos += f"- {item['Descripción']} (x{int(item['Cantidad'])}) ... ${item['Subtotal']:,.2f}\n"
+                            
+                            # 1. Descontar Stock en Supabase
+                            try:
+                                res_stock = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                if res_stock.data:
+                                    stock_actual = float(res_stock.data[0]["stock"] or 0.0)
+                                    nuevo_stock = stock_actual - float(item["Cantidad"])
+                                    supabase.table("productos").update({"stock": nuevo_stock}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                            except Exception as e:
+                                print(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
+
+                            # 2. Preparar línea de venta para Supabase y Excel local
+                            registro_linea = {
+                                "rut_empresa": rut_actual,
+                                "transaccion_id": transaccion_id_actual,
+                                "fecha_hora": fecha_hora_actual.isoformat(),
+                                "caja": caja_actual, 
+                                "documento": tipo_documento,
+                                "cliente": cliente_nombre if cliente_nombre else "Cliente General",
+                                "codigo_producto": str(item["Código"]), 
+                                "descripcion": str(item["Descripción"]),
+                                "cantidad": float(item["Cantidad"]), 
+                                "precio_unitario": float(item["Precio Unitario"]),
+                                "subtotal": float(item["Subtotal"]), 
+                                "forma_pago": forma_pago,
+                                "total_boleta": float(total_venta)
+                            }
+                            
+                            try:
+                                supabase.table("ventas").insert(registro_linea).execute()
+                            except Exception as e:
+                                print(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")
+                            
+                            # Preparamos el array local para el Excel de respaldo
                             registros_nuevos.append({
-                                "TransaccionID": f"TX_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                                "TransaccionID": transaccion_id_actual,
                                 "FechaHora": fecha_hora_actual.strftime("%Y-%m-%d %H:%M:%S"),
                                 "Caja": caja_actual, "Documento": tipo_documento,
                                 "Cliente": cliente_nombre if cliente_nombre else "Cliente General",
@@ -2853,6 +2819,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
                                 "TotalBoleta": total_venta
                             })
                    
+                        # --- 💾 RESPALDO LOCAL: EXCEL ---
                         archivo_mensual = os.path.join(ruta_negocio, f"Libro_Ventas_{fecha_hora_actual.strftime('%Y_%m')}.xlsx")
                         df_nuevo = pd.DataFrame(registros_nuevos)
                         if os.path.exists(archivo_mensual):
@@ -2860,7 +2827,6 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         else:
                             df_nuevo.to_excel(archivo_mensual, index=False)
 
-                        # Registrar en Cuentas por Cobrar si aplica
                         if any(p in forma_pago.lower() for p in ["fiado", "crédito", "credito", "consignación", "consignacion"]):
                             archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
                             registro_cxp = pd.DataFrame([{
@@ -2877,6 +2843,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
                             else:
                                 registro_cxp.to_excel(archivo_cxp, index=False)
 
+                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE ---
                         cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
                        
                         st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
@@ -2900,15 +2867,12 @@ PAGO: {forma_pago.upper()}
 {cfg.get('pie_pagina', 'Gracias por su preferencia')}
 ========================================"""
                         
-                        # 🗂️ ARCHIVADOR AUTOMÁTICO POR SUBDIRECTORIOS
                         try:
-                            # Limpiar nombre del tipo de documento para usarlo como carpeta segura
                             carpeta_tipo = tipo_documento.lower().replace(" ", "_").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
                             dir_archivador = os.path.join(ruta_negocio, "archivador_ventas", carpeta_tipo)
                             os.makedirs(dir_archivador, exist_ok=True)
                             
-                            nombre_archivo_doc = f"TX_{fecha_hora_actual.strftime('%Y%m%d_%H%M%S')}.txt"
-                            ruta_completa_doc = os.path.join(dir_archivador, nombre_archivo_doc)
+                            ruta_completa_doc = os.path.join(dir_archivador, f"{transaccion_id_actual}.txt")
                             
                             with open(ruta_completa_doc, "w", encoding="utf-8") as f_doc:
                                 f_doc.write(texto_recibo)
@@ -2925,12 +2889,21 @@ PAGO: {forma_pago.upper()}
                 st.session_state.estado_pago = False
                 st.rerun()
 
-    # 4. Pantalla Principal del POS (Selección y Carrito)
     else:
-        if df_base is not None:
-            col_cod = next((c for c in df_base.columns if 'código' in str(c).lower() or 'codigo' in str(c).lower() or 'ean' in str(c).lower()), df_base.columns[0])
-            col_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower() or 'producto' in str(c).lower()), df_base.columns[1])
-            col_precio = "Precio de Venta" if "Precio de Venta" in df_base.columns else df_base.columns[5]
+        # --- LÓGICA DE INVENTARIO CONECTADA A LA NUBE (POS) ---
+        df_nube = pd.DataFrame()
+        try:
+            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock").eq("rut_empresa", rut_actual).execute()
+            if res_pos.data:
+                df_nube = pd.DataFrame(res_pos.data)
+        except Exception as e:
+            st.error(f"⚠️ Error conectando al inventario en la nube: {e}")
+
+        if not df_nube.empty:
+            col_cod = 'codigo'
+            col_desc = 'descripcion'
+            col_precio = 'precio_venta'
+            col_stock = 'stock'
 
             metodo_lectura = st.radio("Método de entrada de código:", ["⌨️ Digitar / Lector Físico", "📷 Usar Cámara del Celular"], horizontal=True, key="radio_metodo_pos")
 
@@ -2944,18 +2917,18 @@ PAGO: {forma_pago.upper()}
             else:
                 codigo_escan_pos = st.text_input("📷 Digita el código o usa tu pistola láser:", key="input_escan_pos")
 
-            opciones_productos = ["-- Selecciona o busca un producto --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_base.iterrows()]
+            opciones_productos = ["-- Selecciona o busca un producto --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_nube.iterrows()]
             prod_sugerido_pos_idx = 0
        
             if codigo_escan_pos:
-                match_pos = df_base[df_base[col_cod].astype(str) == str(codigo_escan_pos)]
+                match_pos = df_nube[df_nube[col_cod].astype(str) == str(codigo_escan_pos)]
                 if not match_pos.empty:
                     match_str_pos = f"{match_pos.iloc[0][col_cod]} - {match_pos.iloc[0][col_desc]}"
                     if match_str_pos in opciones_productos:
                         prod_sugerido_pos_idx = opciones_productos.index(match_str_pos)
                         st.success(f"✔️ Producto detectado: {match_str_pos}")
                     
-                        st.session_state.precio_actual_input = float(match_pos.iloc[0][col_precio])
+                        st.session_state.precio_actual_input = float(match_pos.iloc[0][col_precio] or 0.0)
                         st.session_state.ultimo_prod_sel = match_str_pos
 
             if "ultimo_prod_sel" not in st.session_state:
@@ -2974,9 +2947,9 @@ PAGO: {forma_pago.upper()}
                 st.session_state.ultimo_prod_sel = producto_seleccionado
                 if producto_seleccionado != "-- Selecciona o busca un producto --":
                     c_buscado = producto_seleccionado.split(" - ")[0]
-                    match_row = df_base[df_base[col_cod].astype(str) == str(c_buscado)]
+                    match_row = df_nube[df_nube[col_cod].astype(str) == str(c_buscado)]
                     if not match_row.empty:
-                        st.session_state.precio_actual_input = float(match_row.iloc[0][col_precio])
+                        st.session_state.precio_actual_input = float(match_row.iloc[0][col_precio] or 0.0)
                 else:
                     st.session_state.precio_actual_input = 0.0
 
@@ -2994,19 +2967,17 @@ PAGO: {forma_pago.upper()}
                         st.warning("⚠️ Selecciona un producto válido.")
                     else:
                         c_buscado = producto_seleccionado.split(" - ")[0]
-                        match_row = df_base[df_base[col_cod].astype(str) == str(c_buscado)]
+                        match_row = df_nube[df_nube[col_cod].astype(str) == str(c_buscado)]
                         
                         stock_disponible = 0.0
-                        col_stock_name = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower()), None)
-                        
-                        if not match_row.empty and col_stock_name:
-                            stock_disponible = float(match_row.iloc[0][col_stock_name])
+                        if not match_row.empty:
+                            stock_disponible = float(match_row.iloc[0][col_stock] or 0.0)
 
                         unidades_en_carrito = sum(item["Cantidad"] for item in st.session_state.carrito_ventas if item["Código"] == c_buscado)
                         total_intentado = unidades_en_carrito + float(cantidad_vendida)
 
-                        if controlar_stock and col_stock_name and total_intentado > stock_disponible:
-                            st.error(f"🚨 **¡Inventario Insuficiente!** Stock disponible: {stock_disponible:,.2f} | Intentas vender: {total_intentado:,.2f}")
+                        if controlar_stock and total_intentado > stock_disponible:
+                            st.error(f"🚨 **¡Inventario Insuficiente en la Nube!** Stock disponible: {stock_disponible:,.2f} | Intentas vender: {total_intentado:,.2f}")
                         else:
                             st.session_state.carrito_ventas.append({
                                 "Código": c_buscado,
@@ -3017,6 +2988,8 @@ PAGO: {forma_pago.upper()}
                             })
                             st.success("✅ Producto agregado con éxito.")
                             st.rerun()
+        else:
+            st.info("ℹ️ Aún no hay productos registrados en tu base de datos en la nube.")
 
         st.divider()
         st.markdown("### 🛒 Carrito de Venta Actual:")
@@ -3091,7 +3064,6 @@ elif menu == "📒 Cuadratura Diaria":
 elif menu == "🏦 Conciliación y Retiros Seguros": 
     mostrar_modulo_conciliacion_retiros(ruta_negocio)
 
-# Dentro de tu menú de navegación lateral, agrega esta línea:
 elif menu == "📈 Reportes y Analítica":
     mostrar_modulo_reportes_avanzados(negocio_seleccionado)
 
@@ -3148,22 +3120,19 @@ elif menu == "🔑 Control Maestro de Licencias":
         if cliente_sel_data:
             f_actual_exp_str = cliente_sel_data.get("fecha_expiracion")
             
+            try:
+                if f_actual_exp_str and str(f_actual_exp_str).strip() not in ["None", "NaT", "nan", ""]:
+                    f_default_date = pd.to_datetime(str(f_actual_exp_str)).date()
+                else:
+                    f_default_date = hoy_actual
+            except Exception:
+                f_default_date = hoy_actual
+
             with st.form(f"form_mod_fechas_principal_{rut_a_modificar}"):
                 st.write(f"📌 **Editando a:** {cliente_sel_data.get('empresa_nombre')}")
                 
-                # --- BLINDAJE CONTRA CELDAS VACÍAS (NULL) EN SUPABASE ---
-                try:
-                    if f_actual_exp_str and str(f_actual_exp_str).strip() not in ["None", "NaT", "nan", ""]:
-                        f_default_date = pd.to_datetime(str(f_actual_exp_str)).date()
-                    else:
-                        f_default_date = hoy_actual
-                except Exception:
-                    f_default_date = hoy_actual
-                # ---------------------------------------------------------
-
                 nueva_fecha_fin = st.date_input("Fecha de Finalización del Periodo", value=f_default_date)
                 
-                # Blindaje para el checkbox por si la columna licencia_activa está en NULL
                 estado_licencia = cliente_sel_data.get("licencia_activa")
                 estado_licencia = True if estado_licencia is None else bool(estado_licencia)
                 
@@ -3182,7 +3151,3 @@ elif menu == "🔑 Control Maestro de Licencias":
                         st.error(f"❌ Error al actualizar en Supabase: {e}")
     else:
         st.warning("⚠️ No se encontraron registros de empresas en Supabase.")
-
-
-
-

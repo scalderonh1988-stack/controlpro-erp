@@ -1774,7 +1774,7 @@ elif menu == "📉 Mermas y Ajustes":
                                     nuevo_stock_nube = max(0.0, stock_actual_nube - float(cant_merma))
                                     
                                     # 2. Actualizar el stock disminuido en Supabase
-                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("id_negocio", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
 
                                     # 3. Registrar el historial de la merma en Supabase
                                     lote_limpio = "N/A"

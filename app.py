@@ -1734,7 +1734,9 @@ elif menu == "📉 Mermas y Ajustes":
                 observacion_merma = st.text_input("Observación opcional (Ej: Rotura en pasillo, vencido del semáforo)")
 
                 lotes_disponibles_prod = []
-                codigo_p_merma = prod_seleccionado_merma.split(" - ")[0] if prod_seleccionado_merma and prod_seleccionado_merma != "-- Selecciona un producto --" else ""
+                codigo_p_merma = ""
+                if prod_seleccionado_merma and prod_seleccionado_merma != "-- Selecciona un producto --":
+                    codigo_p_merma = str(prod_seleccionado_merma.split(" - ")[0]).strip()
                
                 archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
                 if os.path.exists(archivo_lotes) and codigo_p_merma:
@@ -1756,27 +1758,26 @@ elif menu == "📉 Mermas y Ajustes":
                     elif cant_merma <= 0:
                         st.warning("⚠️ La cantidad debe ser mayor a 0.")
                     else:
-                        codigo_p_merma = prod_seleccionado_merma.split(" - ")[0]
-                        desc_p_merma = prod_seleccionado_merma.split(" - ")[1]
+                        codigo_p_merma = str(prod_seleccionado_merma.split(" - ")[0]).strip()
+                        desc_p_merma = str(prod_seleccionado_merma.split(" - ")[1]).strip()
 
                         try:
-                            # 1. Consultar el producto en Supabase usando rut_empresa para evitar errores de columnas faltantes
-                            res_prod = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                            # 1. Consultar el producto en Supabase usando rut_empresa y el código limpio
+                            res_prod = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).eq("codigo", codigo_p_merma).execute()
                             
                             if res_prod.data:
                                 prod_data = res_prod.data[0]
                                 stock_actual_nube = float(prod_data.get("stock", 0) or 0.0)
                                 
-                                # Validar que haya suficiente stock
                                 if stock_actual_nube < cant_merma:
                                     st.warning(f"⚠️ Stock insuficiente. Stock actual en nube: {stock_actual_nube}")
                                 else:
                                     nuevo_stock_nube = max(0.0, stock_actual_nube - float(cant_merma))
                                     
-                                    # 2. Actualizar el stock disminuido en Supabase
-                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                                    # 2. Actualizar el stock en Supabase usando rut_empresa
+                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", codigo_p_merma).execute()
 
-                                    # 3. Registrar el historial de la merma en Supabase
+                                    # 3. Registrar la merma en la tabla de Supabase
                                     lote_limpio = "N/A"
                                     if lotes_disponibles_prod and lote_seleccionado_str:
                                         import re
@@ -1786,12 +1787,12 @@ elif menu == "📉 Mermas y Ajustes":
 
                                     nuevo_reg_merma_nube = {
                                         "fecha_hora": datetime.now().isoformat(),
-                                        "codigo": str(codigo_p_merma),
-                                        "descripcion": str(desc_p_merma),
+                                        "codigo": codigo_p_merma,
+                                        "descripcion": desc_p_merma,
                                         "cantidad": float(cant_merma),
-                                        "motivo": str(motivo_merma),
-                                        "lote": str(lote_limpio),
-                                        "observacion": str(observacion_merma) if observacion_merma else "Sin observaciones",
+                                        "motivo": motivo_merma,
+                                        "lote": lote_limpio,
+                                        "observacion": observacion_merma if observacion_merma else "Sin observaciones",
                                         "id_negocio": str(rut_actual).strip()
                                     }
                                     
@@ -1800,7 +1801,7 @@ elif menu == "📉 Mermas y Ajustes":
                                     st.success(f"✅ ¡Merma registrada y stock descontado en la nube con éxito! (Nuevo stock: {nuevo_stock_nube})")
                                     st.rerun()
                             else:
-                                st.error("❌ No se encontró el producto en la base de datos de la nube.")
+                                st.error(f"❌ No se encontró el producto con código '{codigo_p_merma}' para la empresa '{rut_actual}'.")
                         except Exception as e:
                             st.error(f"❌ Error al procesar la merma en Supabase: {e}")
 

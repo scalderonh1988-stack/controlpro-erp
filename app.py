@@ -1195,38 +1195,58 @@ elif menu == "📦 Inventario y Productos":
             st.error(f"⚠️ Error al conectar con Supabase: {e}")
 
     with tab_inv2:
-        st.markdown("#### 👥 Maestro de Clientes")
-        archivo_clientes = os.path.join(ruta_negocio, "Maestro_Clientes.xlsx")
-        if not os.path.exists(archivo_clientes):
-            pd.DataFrame(columns=['Nombre_Cliente', 'Rut', 'Telefono', 'Email', 'Direccion']).to_excel(archivo_clientes, index=False)
-        
-        df_clientes = pd.read_excel(archivo_clientes)
-        st.dataframe(df_clientes, use_container_width=True)
-        
-        with st.form("form_nuevo_cliente_local", clear_on_submit=True):
-            st.markdown("##### Registrar Cliente Nuevo")
-            cl_nom = st.text_input("Nombre / Razón Social")
-            cl_rut = st.text_input("RUT / Identificación")
-            cl_tel = st.text_input("Teléfono")
-            cl_mail = st.text_input("Correo Electrónico")
-            cl_dir = st.text_input("Dirección")
+            st.markdown("#### 👥 Maestro de Clientes")
             
-            btn_g_cliente = st.form_submit_button("💾 Guardar Cliente")
-            if btn_g_cliente:
-                if not cl_nom:
-                    st.warning("⚠️ Ingresa el nombre del cliente.")
-                else:
-                    nuevo_c = pd.DataFrame([{
-                        'Nombre_Cliente': cl_nom,
-                        'Rut': cl_rut,
-                        'Telefono': cl_tel,
-                        'Email': cl_mail,
-                        'Direccion': cl_dir
-                    }])
-                    df_c_act = pd.concat([df_clientes, nuevo_c], ignore_index=True)
-                    df_c_act.to_excel(archivo_clientes, index=False)
-                    st.success("✅ ¡Cliente guardado con éxito!")
-                    st.rerun()
+            # 1. Cargar clientes directamente desde Supabase filtrando por la empresa actual
+            df_clientes = pd.DataFrame()
+            try:
+                res_cli = supabase.table("clientes").select("*").eq("id_negocio", rut_actual).execute()
+                if res_cli.data:
+                    # Mapeamos los campos para que la tabla muestre los nombres correctos
+                    df_clientes = pd.DataFrame(res_cli.data)
+                    # Aseguramos nombres de columnas estandarizados si vienen con otro nombre de la nube
+                    renames = {}
+                    if "nombre" in df_clientes.columns and "Nombre_Cliente" not in df_clientes.columns:
+                        renames["nombre"] = "Nombre_Cliente"
+                    if "direccion" in df_clientes.columns and "Direccion" not in df_clientes.columns:
+                        renames["direccion"] = "Direccion"
+                    if renames:
+                        df_clientes = df_clientes.rename(columns=renames)
+            except Exception as e:
+                st.error(f"⚠️ Error cargando clientes desde la nube: {e}")
+
+            st.dataframe(df_clientes, use_container_width=True)
+            
+            with st.form("form_nuevo_cliente_local", clear_on_submit=True):
+                st.markdown("##### Registrar Cliente Nuevo")
+                cl_nom = st.text_input("Nombre / Razón Social")
+                cl_rut = st.text_input("RUT / Identificación")
+                cl_tel = st.text_input("Teléfono")
+                cl_mail = st.text_input("Correo Electrónico")
+                cl_dir = st.text_input("Dirección")
+                
+                btn_g_cliente = st.form_submit_button("💾 Guardar Cliente")
+                if btn_g_cliente:
+                    if not cl_nom or not cl_rut:
+                        st.warning("⚠️ Debes ingresar al menos el nombre y el RUT del cliente.")
+                    else:
+                        # 2. Preparamos el diccionario para subirlo directo a Supabase
+                        nuevo_cliente_nube = {
+                            "rut": str(cl_rut).strip(),
+                            "nombre": str(cl_nom).strip(),
+                            "telefono": str(cl_tel).strip(),
+                            "email": str(cl_mail).strip(),
+                            "direccion": str(cl_dir).strip(),
+                            "id_negocio": str(rut_actual).strip() # Candado vital para la empresa actual
+                        }
+                        
+                        try:
+                            # 3. Guardado directo en la tabla 'clientes' de Supabase
+                            supabase.table("clientes").upsert(nuevo_cliente_nube, on_conflict="rut").execute()
+                            st.success("✅ ¡Cliente guardado con éxito en la nube!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar en Supabase: {e}")
 
     with tab_inv3:
         st.markdown("#### 🚚 Directorio de Proveedores")

@@ -13,25 +13,25 @@ def buscar_producto_en_nube(rut_empresa, codigo_barras):
     try:
         respuesta = supabase.table("productos") \
             .select("*") \
-            .eq("rut_empresa", rut_empresa) \
-            .eq("codigo", codigo_barras) \
+            .eq("rut_empresa", str(rut_empresa).strip()) \
+            .eq("codigo", str(codigo_barras).strip()) \
             .execute()
         
-        if len(respuesta.data) > 0:
+        if respuesta.data and len(respuesta.data) > 0:
             return respuesta.data[0] 
         else:
             return None 
     except Exception as e:
-        print(f"❌ Error de conexión: {e}")
+        print(f"❌ Error de conexión al buscar producto: {e}")
         return None
 
 def actualizar_stock_en_nube(rut_empresa, codigo_barras, nuevo_stock):
     """Actualiza el stock del producto directamente en Supabase."""
     try:
         supabase.table("productos") \
-            .update({"stock": nuevo_stock}) \
-            .eq("rut_empresa", rut_empresa) \
-            .eq("codigo", codigo_barras) \
+            .update({"stock": float(nuevo_stock)}) \
+            .eq("rut_empresa", str(rut_empresa).strip()) \
+            .eq("codigo", str(codigo_barras).strip()) \
             .execute()
     except Exception as e:
         print(f"❌ Error al actualizar stock en la nube: {e}")
@@ -66,9 +66,9 @@ while True:
     producto = buscar_producto_en_nube(RUT_NEGOCIO, codigo_ingresado)
 
     if not producto:
-        print(f"❌ Producto con código '{codigo_ingresado}' no encontrado en la base de datos.")
+        print(f"❌ Producto con código '{codigo_ingresado}' no encontrado para este local.")
     else:
-        # Extraemos los datos de la nube
+        # Extraemos los datos de la nube con seguridad
         descripcion = producto.get('descripcion') or "Sin descripción"
         
         try:
@@ -91,9 +91,12 @@ while True:
                 continue
 
         try:
-            cantidad_comprada = float(input("Cantidad a vender (por defecto 1): ") or "1")
+            entrada_cant = input("Cantidad a vender (por defecto 1): ").strip()
+            cantidad_comprada = float(entrada_cant) if entrada_cant else 1.0
+            if cantidad_comprada <= 0:
+                cantidad_comprada = 1.0
         except ValueError:
-            cantidad_comprada = 1
+            cantidad_comprada = 1.0
 
         # Calculamos el nuevo stock
         nuevo_stock = stock_actual - cantidad_comprada
@@ -108,7 +111,7 @@ while True:
             "rut_empresa": RUT_NEGOCIO,
             "fecha": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "detalle": f"{descripcion} (Cant: {cantidad_comprada})",
-            "monto": total_linea,
+            "monto": float(total_linea),
             "metodo_pago": "Efectivo",
             "documento": "Ticket de Venta"
         })
@@ -125,11 +128,14 @@ if carrito:
         print(f"❌ Error al conectar con la nube: {e}")
         
         # Guardado de emergencia en CSV si falla el internet al final
-        with open("Respaldo_Ventas_Emergencia.csv", "w", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=carrito[0].keys())
-            writer.writeheader()
-            writer.writerows(carrito)
-        print("⚠️ Falló el internet. Las ventas se guardaron localmente en 'Respaldo_Ventas_Emergencia.csv'.")
+        try:
+            with open("Respaldo_Ventas_Emergencia.csv", "w", newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=carrito[0].keys())
+                writer.writeheader()
+                writer.writerows(carrito)
+            print("⚠️ Falló el internet. Las ventas se guardaron localmente en 'Respaldo_Ventas_Emergencia.csv'.")
+        except Exception as csv_err:
+            print(f"❌ No se pudo crear el respaldo local: {csv_err}")
 
     print("\n---------------------------------------------------------")
     print("🏁 CAJA CERRADA CON ÉXITO")

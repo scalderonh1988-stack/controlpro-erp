@@ -2665,7 +2665,7 @@ elif menu == "⚙️ Configuración General":
                 except Exception as e:
                     st.error(f"❌ Ocurrió un error al procesar el archivo: {e}")
 
-# ----------------- SECCIÓN VENTAS / POS RÁPIDO (CONECTADO A LA NUBE) -----------------
+# ----------------- SECCIÓN VENTAS / POS RÁPIDO (CONECTADO A LA NUBE Y AISLADO) -----------------
 elif menu == "💰 Módulo de Ventas (POS)":
     caja_actual = param_caja if param_caja else "Caja Principal"
     rut_actual = st.session_state.get("negocio_seleccionado")
@@ -2683,18 +2683,23 @@ elif menu == "💰 Módulo de Ventas (POS)":
 
     cliente_nombre, cliente_rut = "", ""
 
-    # 1. Lógica de Selección de Clientes (Solo para Factura/Guía) CONECTADO A SUPABASE
+    # 1. Lógica de Selección de Clientes (Solo para Factura/Guía) BLINDADA POR EMPRESA
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
         try:
-            # Vamos directo a tu tabla de clientes en la nube
-            res_clientes = supabase.table("clientes").select("rut, nombre").execute()
-            df_clientes_pos = pd.DataFrame(res_clientes.data)
+            # Candado de seguridad: Filtramos estrictamente por el RUT del negocio activo
+            res_clientes = supabase.table("clientes").select("rut, nombre").eq("rut_empresa", rut_actual).execute()
+            df_clientes_pos = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
+            
+            # Doble validación por si la columna de empresa en Supabase se llama distinto
+            if df_clientes_pos.empty:
+                res_clientes_alt = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
+                df_clientes_pos = pd.DataFrame(res_clientes_alt.data) if res_clientes_alt.data else pd.DataFrame()
         except Exception as e:
             st.error(f"⚠️ Error conectando a la base de clientes en la nube: {e}")
             df_clientes_pos = pd.DataFrame()
 
         if not df_clientes_pos.empty and "nombre" in df_clientes_pos.columns:
-            # Concatenamos el nombre y el RUT usando las columnas de tu imagen
+            # Concatenamos el nombre y el RUT
             df_clientes_pos["etiqueta"] = df_clientes_pos["nombre"].astype(str) + " (" + df_clientes_pos["rut"].astype(str) + ")"
             lista_clientes = df_clientes_pos["etiqueta"].tolist()
             
@@ -2706,7 +2711,7 @@ elif menu == "💰 Módulo de Ventas (POS)":
                 cliente_nombre = cliente_elegido.split(" (")[0]
                 cliente_rut = cliente_elegido.split(" (")[1].replace(")", "")
         else:
-            st.warning("⚠️ No hay clientes registrados en la nube. Agrégalos en el módulo de Inventario.")
+            st.warning("⚠️ No hay clientes registrados para este negocio en la nube. Agrégalos en el módulo correspondiente.")
             col_f1, col_f2 = st.columns(2)
             with col_f1: cliente_nombre = st.text_input("Razón Social / Nombre del Cliente")
             with col_f2: cliente_rut = st.text_input("RUT / Identificación Tributaria")

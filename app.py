@@ -2261,7 +2261,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                     except Exception as e:
                                         print(f"⚠️ Error actualizando stock en Supabase: {e}")
 
-                                    # 3. Registrar el lote directamente en la tabla 'lotes' de Supabase (si maneja lote)
+                                    # 3. Registrar el lote directamente en la tabla 'lotes' de Supabase
                                     if item.get("ManejaLote") == "Sí" and item.get("Lote") and item.get("Lote") != "N/A":
                                         nuevo_reg_lote_nube = {
                                             "codigo": str(item["Código"]),
@@ -2270,7 +2270,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                             "cantidad_disponible": float(item["Cantidad"]),
                                             "fecha_vencimiento": str(item["FechaVencimiento"]),
                                             "costo_unitario_final": float(item["CostoUnitarioFinal"]),
-                                            "id_negocio": str(rut_actual).strip()
+                                            "rut_empresa": str(rut_actual).strip()  # <-- Aquí usas rut_empresa en lugar de id_negocio
                                         }
                                         try:
                                             supabase.table("lotes").insert(nuevo_reg_lote_nube).execute()

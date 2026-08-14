@@ -1913,7 +1913,7 @@ elif menu == "⚠️ Control y Gestión de Inventario":
         # --- CARGA DE LOTES DESDE SUPABASE ---
         df_lotes_venc = pd.DataFrame()
         try:
-            res_lotes_nube = supabase.table("lotes").select("*").eq("id_negocio", rut_actual).execute()
+            res_lotes_nube = supabase.table("lotes").select("*").eq("rut_empresa", rut_actual).execute()
             if res_lotes_nube.data:
                 df_lotes_venc = pd.DataFrame(res_lotes_nube.data)
         except Exception as e:

@@ -1301,7 +1301,7 @@ elif menu == "📦 Inventario y Productos":
                     
                     try:
                         # 3. Guardado directo en la tabla 'proveedores' de Supabase
-                        supabase.table("proveedores").upsert(nuevo_proveedor_nube, on_conflict="rut").execute()
+                        supabase.table("proveedores").insert(nuevo_proveedor_nube).execute()
                         st.success("✅ ¡Proveedor guardado con éxito en la nube!")
                         st.rerun()
                     except Exception as e:

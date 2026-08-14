@@ -1756,86 +1756,53 @@ elif menu == "📉 Mermas y Ajustes":
                     elif cant_merma <= 0:
                         st.warning("⚠️ La cantidad debe ser mayor a 0.")
                     else:
+                        codigo_p_merma = prod_seleccionado_merma.split(" - ")[0]
                         desc_p_merma = prod_seleccionado_merma.split(" - ")[1]
 
-                        # 1. Descontar stock directamente en la tabla 'productos' de Supabase
                         try:
-                            res_stk = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
-                            if res_stk.data:
-                                stock_actual_nube = float(res_stk.data[0]["stock"] or 0.0)
-                                nuevo_stock_nube = max(0.0, stock_actual_nube - float(cant_merma))
+                            # 1. Consultar el producto directamente en Supabase para obtener su stock actual real
+                            res_prod = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                            
+                            if res_prod.data:
+                                prod_data = res_prod.data[0]
+                                stock_actual_nube = float(prod_data.get("stock", 0) or 0.0)
                                 
-                                supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                                # Validar que haya suficiente stock
+                                if stock_actual_nube < cant_merma:
+                                    st.warning(f"⚠️ Stock insuficiente. Stock actual en nube: {stock_actual_nube}")
+                                else:
+                                    nuevo_stock_nube = max(0.0, stock_actual_nube - float(cant_merma))
+                                    
+                                    # 2. Actualizar el stock disminuido en Supabase
+                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+
+                                    # 3. Registrar el historial de la merma en Supabase
+                                    lote_limpio = "N/A"
+                                    if lotes_disponibles_prod and lote_seleccionado_str:
+                                        import re
+                                        match_lote_ext = re.search(r'Lote:\s*(.*?)\s*\(Disponibles', lote_seleccionado_str)
+                                        if match_lote_ext:
+                                            lote_limpio = match_lote_ext.group(1).strip()
+
+                                    nuevo_reg_merma_nube = {
+                                        "fecha_hora": datetime.now().isoformat(),
+                                        "codigo": str(codigo_p_merma),
+                                        "descripcion": str(desc_p_merma),
+                                        "cantidad": float(cant_merma),
+                                        "motivo": str(motivo_merma),
+                                        "lote": str(lote_limpio),
+                                        "observacion": str(observacion_merma) if observacion_merma else "Sin observaciones",
+                                        "id_negocio": str(rut_actual).strip()
+                                    }
+                                    
+                                    supabase.table("mermas").insert(nuevo_reg_merma_nube).execute()
+
+                                    st.success(f"✅ ¡Merma registrada y stock descontado en la nube con éxito! (Nuevo stock: {nuevo_stock_nube})")
+                                    st.rerun()
                             else:
-                                st.warning("⚠️ El producto no se encontró en el inventario de Supabase.")
+                                st.error("❌ No se encontró el producto en la base de datos de la nube.")
                         except Exception as e:
-                            st.error(f"❌ Error al descontar stock en la nube: {e}")
-
-                        # 2. Registrar la merma en la tabla de Supabase (opcionalmente puedes crear una tabla 'mermas' en Supabase o mantener respaldo)
-                        nuevo_reg_merma_nube = {
-                            "fecha_hora": datetime.now().isoformat(),
-                            "codigo": str(codigo_p_merma),
-                            "descripcion": str(desc_p_merma),
-                            "cantidad": float(cant_merma),
-                            "motivo": str(motivo_merma),
-                            "observacion": str(observacion_merma) if observacion_merma else "Sin observaciones",
-                            "id_negocio": str(rut_actual).strip()
-                        }
-                        try:
-                            supabase.table("mermas").insert(nuevo_reg_merma_nube).execute()
-                        except Exception as e:
-                            print(f"Nota de respaldo local/nube mermas: {e}")
-
-                        lote_limpio = "N/A"
-                        if lotes_disponibles_prod and lote_seleccionado_str:
-                            import re
-                            match_lote_ext = re.search(r'Lote:\s*(.*?)\s*\(Disponibles', lote_seleccionado_str)
-                            if match_lote_ext:
-                                lote_limpio = match_lote_ext.group(1).strip()
-                               
-                                df_lotes_up = pd.read_excel(archivo_lotes, dtype={'Código': str})
-                                match_lote_row = df_lotes_up[(df_lotes_up['Código'].astype(str) == str(codigo_p_merma)) & (df_lotes_up['Lote'].astype(str) == str(lote_limpio))]
-                               
-                                if not match_lote_row.empty:
-                                    idx_l = match_lote_row.index[0]
-                                    cant_dispo_lote = float(df_lotes_up.at[idx_l, 'CantidadDisponible'])
-                                    df_lotes_up.at[idx_l, 'CantidadDisponible'] = max(0.0, cant_dispo_lote - cant_merma)
-                                    df_lotes_up.to_excel(archivo_lotes, index=False)
-
-                        archivo_mermas = os.path.join(ruta_negocio, "base_mermas.xlsx") if 'ruta_negocio' in globals() else "base_mermas.xlsx"
-                        nuevo_reg_merma = pd.DataFrame([{
-                            "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "Código": codigo_p_merma,
-                            "Descripción": desc_p_merma,
-                            "Cantidad": cant_merma,
-                            "Motivo": motivo_merma,
-                            "Lote": lote_limpio,
-                            "Observacion": observacion_merma if observacion_merma else "Sin observaciones"
-                        }])
-
-                        if os.path.exists(archivo_mermas):
-                            df_hist_mermas = pd.read_excel(archivo_mermas, dtype={'Código': str})
-                            pd.concat([df_hist_mermas, nuevo_reg_merma], ignore_index=True).to_excel(archivo_mermas, index=False)
-                        else:
-                            nuevo_reg_merma.to_excel(archivo_mermas, index=False)
-
-                        st.success(f"✅ ¡Merma registrada con éxito! Se descontaron {cant_merma} unidades de '{desc_p_merma}'.")
-                        st.rerun()
-
-            archivo_mermas_ver = os.path.join(ruta_negocio, "base_mermas.xlsx") if 'ruta_negocio' in globals() else "base_mermas.xlsx"
-            if os.path.exists(archivo_mermas_ver):
-                st.divider()
-                st.markdown("### 📊 Historial de Mermas y Ajustes Registrados")
-                df_ver_mermas = pd.read_excel(archivo_mermas_ver, dtype={'Código': str})
-                if not df_ver_mermas.empty:
-                    st.dataframe(df_ver_mermas.tail(15), use_container_width=True)
-                else:
-                    st.info("ℹ️ Aún no hay registros en el historial de mermas.")
-        else:
-            st.warning("⚠️ No se encontró la columna de stock en la base de datos de productos.")
-    else:
-        st.error(f"⚠️ No se encontró la base de datos para '{negocio_seleccionado}'.")
-
+                            st.error(f"❌ Error al procesar la merma en Supabase: {e}")
 # ---------------- SECCIÓN FINANZAS ----------------
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero y Gastos")

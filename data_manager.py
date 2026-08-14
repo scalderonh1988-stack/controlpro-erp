@@ -53,6 +53,7 @@ def cargar_maestro_clientes():
     """
     try:
         tenant_id = get_current_tenant()
+        st.write(f"Depurando: El sistema está buscando clientes para el ID: '{tenant_id}'")
         respuesta = supabase.table("clientes").select("*").eq("id_negocio", tenant_id).execute()
         maestro = {}
         

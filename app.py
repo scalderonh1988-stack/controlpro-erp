@@ -1761,7 +1761,7 @@ elif menu == "📉 Mermas y Ajustes":
 
                         try:
                             # 1. Consultar el producto directamente en Supabase para obtener su stock actual real
-                            res_prod = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                            res_prod = supabase.table("productos").select("*").eq("id_negocio", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
                             
                             if res_prod.data:
                                 prod_data = res_prod.data[0]

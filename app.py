@@ -1919,13 +1919,16 @@ elif menu == "⚠️ Control y Gestión de Inventario":
         except Exception as e:
             st.error(f"⚠️ Error cargando lotes desde Supabase: {e}")
 
-        if not df_lotes_venc.empty and 'FechaVencimiento' in df_lotes_venc.columns:
+        # Se admiten tanto nombres en minúscula como en mayúscula para evitar bloqueos
+        col_f_venc = next((c for c in df_lotes_venc.columns if c.lower() in ['fechavencimiento', 'fecha_vencimiento']), None)
+        
+        if not df_lotes_venc.empty and col_f_venc:
             roja, amarilla, verde = [], [], []
             hoy = datetime.now().date()
           
             for idx, row in df_lotes_venc.iterrows():
-                fecha_val = row.get('FechaVencimiento')
-                lote_val = str(row.get('Lote', 'N/A'))
+                fecha_val = row.get(col_f_venc)
+                lote_val = str(row.get('lote', row.get('Lote', 'N/A')))
                
                 if pd.notna(fecha_val) and lote_val != "N/A" and str(fecha_val) != "N/A":
                     try:
@@ -1933,10 +1936,10 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                         dias = (f_venc - hoy).days
                        
                         item = {
-                            "Código": str(row.get("Código", "")),
-                            "Descripción": str(row.get("Descripción", "")),
+                            "Código": str(row.get("codigo", row.get("Código", ""))),
+                            "Descripción": str(row.get("descripcion", row.get("Descripción", ""))),
                             "Lote": lote_val,
-                            "Cantidad Disponible": float(row.get("CantidadDisponible", 0)),
+                            "Cantidad Disponible": float(row.get("cantidad_disponible", row.get("CantidadDisponible", 0))),
                             "Fecha Vencimiento": str(f_venc),
                             "Días Restantes": dias
                         }
@@ -1971,6 +1974,7 @@ elif menu == "⚠️ Control y Gestión de Inventario":
                     st.caption("Sin productos próximos a vencer.")
         else:
             st.info("ℹ️ Aún no hay registros de lotes con fecha de vencimiento guardados en la nube para este negocio.")
+
     with sub_tab2:
         st.markdown(f"### 📦 Asistente de Reabastecimiento Automático (Lead Time configurado: {lead_time_dias} días)")
         if df_base is not None:

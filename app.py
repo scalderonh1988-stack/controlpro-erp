@@ -2032,12 +2032,21 @@ elif menu == "⚠️ Control y Gestión de Inventario":
 elif menu == "🛒 Registrar Compra (CPP)":
     mostrar_encabezado_con_home("🛒 Gestión de Compras y Recepciones (GRC / GRI)")
 
-    if df_base is not None:
-        col_cod = next((c for c in df_base.columns if 'código' in str(c).lower() or 'codigo' in str(c).lower() or 'ean' in str(c).lower()), df_base.columns[0])
-        col_desc = next((c for c in df_base.columns if 'descripción' in str(c).lower() or 'nombre' in str(c).lower() or 'producto' in str(c).lower()), df_base.columns[1])
-        col_stock = next((c for c in df_base.columns if 'stock' in str(c).lower() or 'cantidad' in str(c).lower()), None)
-        col_precio = next((c for c in df_base.columns if 'precio' in str(c).lower() or 'venta' in str(c).lower()), None)
+    # --- CARGA DE PRODUCTOS DIRECTO DESDE LA NUBE (SUPABASE) PARA GRC/GRI ---
+    df_base = pd.DataFrame()
+    try:
+        res_prod_nube = supabase.table("productos").select("codigo, descripcion, stock, precio_venta").eq("rut_empresa", rut_actual).limit(10000).execute()
+        if res_prod_nube.data:
+            df_base = pd.DataFrame(res_prod_nube.data)
+    except Exception as e:
+        st.error(f"⚠️ Error conectando al inventario de la nube para compras: {e}")
 
+    if not df_base.empty:
+        # Definimos las columnas estándar que usarán los selectbox y campos de la GRC
+        col_cod = 'codigo'
+        col_desc = 'descripcion'
+        col_stock = 'stock'
+        col_precio = 'precio_venta'
         accion_producto = st.radio("Selecciona una opción:", ["📥 Registrar Compra / GRC (Factura con Lotes)", "🔄 Recepción Interna / GRI (Ajustes / Producción)", "➕ Crear Producto Nuevo", "✏️ Editar Producto Existente"], horizontal=True)
         st.divider()
 

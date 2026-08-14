@@ -2224,44 +2224,60 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                 pass
 
                             procesados = 0
-                        lineas_detalle_grc = ""
-                        for item in st.session_state.carrito_factura_compras:
-                            if item.get("TipoDoc", "GRC") == "GRC":
-                                lineas_detalle_grc += f"- {item['Descripción']} (x{item['Cantidad']}) | Costo Unit: ${item['CostoUnitarioFinal']:,.2f} | Subtotal: ${item['CostoTotal']:,.2f} | Lote: {item['Lote']}\n"
-                                
-                                # 1. Registro directo en la tabla 'compras' de Supabase con aislamiento por negocio
-                                nuevo_reg_compra_nube = {
-                                    "fecha_hora": datetime.now().isoformat(),
-                                    "tipo_recepcion": "GRC",
-                                    "proveedor": str(prov_final),
-                                    "factura": str(num_factura),
-                                    "codigo": str(item["Código"]),
-                                    "descripcion": str(item["Descripción"]),
-                                    "cantidad": float(item["Cantidad"]),
-                                    "neto_unitario": float(item["NetoUnitario"]),
-                                    "costo_total": float(item["CostoTotal"]),
-                                    "lote": str(item["Lote"]),
-                                    "fecha_vencimiento_lote": str(item["FechaVencimiento"]),
-                                    "condicion_pago": str(condicion_pago),
-                                    "id_negocio": str(rut_actual).strip() # Candado vital por empresa
-                                }
-                                
-                                try:
-                                    supabase.table("compras").insert(nuevo_reg_compra_nube).execute()
-                                except Exception as e:
-                                    print(f"⚠️ Error guardando compra en Supabase: {e}")
+                            lineas_detalle_grc = ""
+                            for item in st.session_state.carrito_factura_compras:
+                                if item.get("TipoDoc", "GRC") == "GRC":
+                                    lineas_detalle_grc += f"- {item['Descripción']} (x{item['Cantidad']}) | Costo Unit: ${item['CostoUnitarioFinal']:,.2f} | Subtotal: ${item['CostoTotal']:,.2f} | Lote: {item['Lote']}\n"
+                                    
+                                    # 1. Registro directo en la tabla 'compras' de Supabase con aislamiento por negocio
+                                    nuevo_reg_compra_nube = {
+                                        "fecha_hora": datetime.now().isoformat(),
+                                        "tipo_recepcion": "GRC",
+                                        "proveedor": str(prov_final),
+                                        "factura": str(num_factura),
+                                        "codigo": str(item["Código"]),
+                                        "descripcion": str(item["Descripción"]),
+                                        "cantidad": float(item["Cantidad"]),
+                                        "neto_unitario": float(item["NetoUnitario"]),
+                                        "costo_total": float(item["CostoTotal"]),
+                                        "lote": str(item["Lote"]),
+                                        "fecha_vencimiento_lote": str(item["FechaVencimiento"]),
+                                        "condicion_pago": str(condicion_pago),
+                                        "id_negocio": str(rut_actual).strip()
+                                    }
+                                    
+                                    try:
+                                        supabase.table("compras").insert(nuevo_reg_compra_nube).execute()
+                                    except Exception as e:
+                                        print(f"⚠️ Error guardando compra en Supabase: {e}")
 
-                                # 2. Actualizar Stock del producto en Supabase en tiempo real
-                                try:
-                                    res_stk = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
-                                    if res_stk.data:
-                                        stk_actual = float(res_stk.data[0]["stock"] or 0.0)
-                                        nuevo_stk = stk_actual + float(item["Cantidad"])
-                                        supabase.table("productos").update({"stock": nuevo_stk}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
-                                except Exception as e:
-                                    print(f"⚠️ Error actualizando stock en Supabase: {e}")
+                                    # 2. Actualizar Stock del producto en Supabase en tiempo real
+                                    try:
+                                        res_stk = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                        if res_stk.data:
+                                            stk_actual = float(res_stk.data[0]["stock"] or 0.0)
+                                            nuevo_stk = stk_actual + float(item["Cantidad"])
+                                            supabase.table("productos").update({"stock": nuevo_stk}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                    except Exception as e:
+                                        print(f"⚠️ Error actualizando stock en Supabase: {e}")
 
-                                procesados += 1
+                                    # 3. Registrar el lote directamente en la tabla 'lotes' de Supabase (si maneja lote)
+                                    if item.get("ManejaLote") == "Sí" and item.get("Lote") and item.get("Lote") != "N/A":
+                                        nuevo_reg_lote_nube = {
+                                            "codigo": str(item["Código"]),
+                                            "descripcion": str(item["Descripción"]),
+                                            "lote": str(item["Lote"]),
+                                            "cantidad_disponible": float(item["Cantidad"]),
+                                            "fecha_vencimiento": str(item["FechaVencimiento"]),
+                                            "costo_unitario_final": float(item["CostoUnitarioFinal"]),
+                                            "id_negocio": str(rut_actual).strip()
+                                        }
+                                        try:
+                                            supabase.table("lotes").insert(nuevo_reg_lote_nube).execute()
+                                        except Exception as e:
+                                            print(f"⚠️ Error guardando lote en Supabase: {e}")
+
+                                    procesados += 1
 
                             archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx") if 'ruta_negocio' in globals() else "Registro_Gastos.xlsx"
                             nuevo_gasto = pd.DataFrame([{
@@ -2293,6 +2309,7 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                     pd.concat([df_cuentas_ant, nueva_cuenta], ignore_index=True).to_excel(archivo_cuentas, index=False)
                                 else:
                                     nueva_cuenta.to_excel(archivo_cuentas, index=False)
+
                             # 🗂️ ARCHIVADOR AUTOMÁTICO GRC (Subdirectorio)
                             try:
                                 dir_arch_grc = os.path.join(ruta_negocio, "archivador_compras", "grc")
@@ -2316,7 +2333,7 @@ TOTAL GRC: ${monto_total_factura_general:,.2f}
                                 print(f"Error archivando GRC: {e}")
 
                             st.session_state.carrito_factura_compras = [i for i in st.session_state.carrito_factura_compras if i.get("TipoDoc") != "GRC"]
-                            st.success(f"✅ ¡GRC #{num_factura} procesada con éxito! Stock actualizado, documento archivado y finanzas sincronizadas.")
+                            st.success(f"✅ ¡GRC #{num_factura} procesada con éxito! Stock actualizado, lotes guardados en la nube y finanzas sincronizadas.")
                             st.rerun()
 
         # --- 2. REGISTRO GRI (Guía de Recepción Interna - Ajustes / Producción / Hallazgos) ---

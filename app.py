@@ -1873,17 +1873,20 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
                 st.warning("⚠️ El libro seleccionado está vacío.")
 
     with tab_inf2:
-        st.markdown("### 🛒 Registro de Entradas y Compras")
-        if not os.path.exists(archivo_compras):
-            st.info("ℹ️ Aún no hay registros de compras guardados para este negocio.")
-        else:
-            df_c = pd.read_excel(archivo_compras)
-            if not df_c.empty:
+        st.markdown("### 🛒 Registro de Entradas y Compras (Nube - Supabase)")
+        try:
+            res_compras_nube = supabase.table("compras").select("*").eq("id_negocio", rut_actual).execute()
+            if res_compras_nube.data:
+                df_c = pd.DataFrame(res_compras_nube.data)
                 st.dataframe(df_c, use_container_width=True)
-                tot_c = df_c["Subtotal"].sum() if "Subtotal" in df_c.columns else 0.0
-                st.metric(label="💵 Total Invertido en Compras", value=f"${tot_c:,.2f}")
+                
+                # Calcular total invertido usando la columna 'costo_total' de Supabase
+                tot_c = df_c["costo_total"].sum() if "costo_total" in df_c.columns else 0.0
+                st.metric(label="💵 Total Invertido en Compras (Nube)", value=f"${tot_c:,.2f}")
             else:
-                st.warning("⚠️ El registro de compras está vacío.")
+                st.info("ℹ️ Aún no hay registros de compras en la nube para este negocio.")
+        except Exception as e:
+            st.error(f"⚠️ Error al cargar el historial de compras desde Supabase: {e}")
 
 # ----------------- SECCIÓN CONTROL Y GESTIÓN DE INVENTARIO -----------------
 elif menu == "⚠️ Control y Gestión de Inventario":

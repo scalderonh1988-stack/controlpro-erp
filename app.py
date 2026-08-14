@@ -1760,8 +1760,8 @@ elif menu == "📉 Mermas y Ajustes":
                         desc_p_merma = prod_seleccionado_merma.split(" - ")[1]
 
                         try:
-                            # 1. Consultar el producto directamente en Supabase para obtener su stock actual real
-                            res_prod = supabase.table("productos").select("*").eq("id_negocio", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                            # 1. Consultar el producto en Supabase usando rut_empresa para evitar errores de columnas faltantes
+                            res_prod = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
                             
                             if res_prod.data:
                                 prod_data = res_prod.data[0]
@@ -1774,7 +1774,7 @@ elif menu == "📉 Mermas y Ajustes":
                                     nuevo_stock_nube = max(0.0, stock_actual_nube - float(cant_merma))
                                     
                                     # 2. Actualizar el stock disminuido en Supabase
-                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("id_negocio", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
+                                    supabase.table("productos").update({"stock": nuevo_stock_nube}).eq("rut_empresa", rut_actual).eq("codigo", str(codigo_p_merma)).execute()
 
                                     # 3. Registrar el historial de la merma en Supabase
                                     lote_limpio = "N/A"
@@ -1803,6 +1803,20 @@ elif menu == "📉 Mermas y Ajustes":
                                 st.error("❌ No se encontró el producto en la base de datos de la nube.")
                         except Exception as e:
                             st.error(f"❌ Error al procesar la merma en Supabase: {e}")
+
+            archivo_mermas_ver = os.path.join(ruta_negocio, "base_mermas.xlsx") if 'ruta_negocio' in globals() else "base_mermas.xlsx"
+            if os.path.exists(archivo_mermas_ver):
+                st.divider()
+                st.markdown("### 📊 Historial de Mermas y Ajustes Registrados")
+                df_ver_mermas = pd.read_excel(archivo_mermas_ver, dtype={'Código': str})
+                if not df_ver_mermas.empty:
+                    st.dataframe(df_ver_mermas.tail(15), use_container_width=True)
+                else:
+                    st.info("ℹ️ Aún no hay registros en el historial de mermas.")
+        else:
+            st.warning("⚠️ No se encontró la columna de stock en la base de datos de productos.")
+    else:
+        st.error(f"⚠️ No se encontró la base de datos para '{negocio_seleccionado}'.")
 # ---------------- SECCIÓN FINANZAS ----------------
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero y Gastos")

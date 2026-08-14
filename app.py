@@ -2219,75 +2219,44 @@ elif menu == "🛒 Registrar Compra (CPP)":
                                 pass
 
                             procesados = 0
-                            lineas_detalle_grc = ""
-                            for item in st.session_state.carrito_factura_compras:
-                                if item.get("TipoDoc", "GRC") == "GRC":
-                                    lineas_detalle_grc += f"- {item['Descripción']} (x{item['Cantidad']}) | Costo Unit: ${item['CostoUnitarioFinal']:,.2f} | Subtotal: ${item['CostoTotal']:,.2f} | Lote: {item['Lote']}\n"
-                                    
-                                    nuevo_reg_compra = pd.DataFrame([{
-                                        "FechaHora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                        "TipoRecepcion": "GRC",
-                                        "Proveedor": prov_final,
-                                        "Factura": num_factura,
-                                        "Código": item["Código"],
-                                        "Descripción": item["Descripción"],
-                                        "Cantidad": item["Cantidad"],
-                                        "NetoUnitario": item["NetoUnitario"],
-                                        "SubtotalNeto": item["SubtotalNeto"],
-                                        "IVA": item["IVA"],
-                                        "ImpuestoEspecifico": item["ImpuestoEspecifico"],
-                                        "CostoTotal": item["CostoTotal"],
-                                        "ManejaLote": item["ManejaLote"],
-                                        "Lote": item["Lote"],
-                                        "FechaVencimientoLote": item["FechaVencimiento"],
-                                        "Condicion_Pago": condicion_pago,
-                                        "FechaVencimientoPago": str(fecha_vencimiento_pago),
-                                        "Banco": banco_cheque,
-                                        "N_Serie": num_serie_cheque,
-                                        "Estado": estado_inicial
-                                    }])
+                        lineas_detalle_grc = ""
+                        for item in st.session_state.carrito_factura_compras:
+                            if item.get("TipoDoc", "GRC") == "GRC":
+                                lineas_detalle_grc += f"- {item['Descripción']} (x{item['Cantidad']}) | Costo Unit: ${item['CostoUnitarioFinal']:,.2f} | Subtotal: ${item['CostoTotal']:,.2f} | Lote: {item['Lote']}\n"
+                                
+                                # 1. Registro directo en la tabla 'compras' de Supabase con aislamiento por negocio
+                                nuevo_reg_compra_nube = {
+                                    "fecha_hora": datetime.now().isoformat(),
+                                    "tipo_recepcion": "GRC",
+                                    "proveedor": str(prov_final),
+                                    "factura": str(num_factura),
+                                    "codigo": str(item["Código"]),
+                                    "descripcion": str(item["Descripción"]),
+                                    "cantidad": float(item["Cantidad"]),
+                                    "neto_unitario": float(item["NetoUnitario"]),
+                                    "costo_total": float(item["CostoTotal"]),
+                                    "lote": str(item["Lote"]),
+                                    "fecha_vencimiento_lote": str(item["FechaVencimiento"]),
+                                    "condicion_pago": str(condicion_pago),
+                                    "id_negocio": str(rut_actual).strip() # Candado vital por empresa
+                                }
+                                
+                                try:
+                                    supabase.table("compras").insert(nuevo_reg_compra_nube).execute()
+                                except Exception as e:
+                                    print(f"⚠️ Error guardando compra en Supabase: {e}")
 
-                                    archivo_compras_path = os.path.join(ruta_negocio, "Registro_Compras.xlsx") if 'ruta_negocio' in globals() else "Registro_Compras.xlsx"
-                                    if os.path.exists(archivo_compras_path):
-                                        df_ec = pd.read_excel(archivo_compras_path, dtype={'Código': str, 'Factura': str})
-                                        pd.concat([df_ec, nuevo_reg_compra], ignore_index=True).to_excel(archivo_compras_path, index=False)
-                                    else:
-                                        nuevo_reg_compra.to_excel(archivo_compras_path, index=False)
+                                # 2. Actualizar Stock del producto en Supabase en tiempo real
+                                try:
+                                    res_stk = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                    if res_stk.data:
+                                        stk_actual = float(res_stk.data[0]["stock"] or 0.0)
+                                        nuevo_stk = stk_actual + float(item["Cantidad"])
+                                        supabase.table("productos").update({"stock": nuevo_stk}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                except Exception as e:
+                                    print(f"⚠️ Error actualizando stock en Supabase: {e}")
 
-                                    if item["ManejaLote"] == "Sí":
-                                        archivo_lotes = os.path.join(ruta_negocio, "base_lotes.xlsx") if 'ruta_negocio' in globals() else "base_lotes.xlsx"
-                                        nuevo_reg_lote = pd.DataFrame([{
-                                            "Código": item["Código"],
-                                            "Descripción": item["Descripción"],
-                                            "Lote": item["Lote"],
-                                            "CantidadDisponible": item["Cantidad"],
-                                            "FechaVencimiento": item["FechaVencimiento"],
-                                            "CostoUnitarioFinal": item["CostoUnitarioFinal"]
-                                        }])
-
-                                        if os.path.exists(archivo_lotes):
-                                            df_lotes = pd.read_excel(archivo_lotes, dtype={'Código': str})
-                                            match_l = df_lotes[(df_lotes['Código'].astype(str) == str(item["Código"])) & (df_lotes['Lote'].astype(str) == str(item["Lote"]))]
-                                            if not match_l.empty:
-                                                idx_l = match_l.index[0]
-                                                cant_ant = float(df_lotes.at[idx_l, 'CantidadDisponible'])
-                                                df_lotes.at[idx_l, 'CantidadDisponible'] = cant_ant + item["Cantidad"]
-                                                df_lotes.at[idx_l, 'CostoUnitarioFinal'] = item["CostoUnitarioFinal"]
-                                                df_lotes.at[idx_l, 'FechaVencimiento'] = item["FechaVencimiento"]
-                                                df_lotes.to_excel(archivo_lotes, index=False)
-                                            else:
-                                                pd.concat([df_lotes, nuevo_reg_lote], ignore_index=True).to_excel(archivo_lotes, index=False)
-                                        else:
-                                            nuevo_reg_lote.to_excel(archivo_lotes, index=False)
-
-                                    match_prod_b = df_base[df_base[col_cod].astype(str) == str(item["Código"])]
-                                    if not match_prod_b.empty:
-                                        idx_b = match_prod_b.index[0]
-                                        stock_act = float(df_base.at[idx_b, col_stock]) if col_stock and not pd.isna(df_base.at[idx_b, col_stock]) else 0.0
-                                        df_base.at[idx_b, col_stock] = stock_act + item["Cantidad"]
-                                        df_base.to_excel(archivo_base, index=False)
-
-                                    procesados += 1
+                                procesados += 1
 
                             archivo_gastos = os.path.join(ruta_negocio, "Registro_Gastos.xlsx") if 'ruta_negocio' in globals() else "Registro_Gastos.xlsx"
                             nuevo_gasto = pd.DataFrame([{

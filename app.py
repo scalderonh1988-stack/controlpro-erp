@@ -2683,29 +2683,30 @@ elif menu == "💰 Módulo de Ventas (POS)":
 
     cliente_nombre, cliente_rut = "", ""
 
+    # 1. Lógica de Selección de Clientes (Solo para Factura/Guía) CONECTADO A SUPABASE
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
-        archivo_clientes_pos = os.path.join(ruta_negocio, "Maestro_Clientes.xlsx")
-        df_clientes_pos = pd.DataFrame()
-        
-        if os.path.exists(archivo_clientes_pos):
-            try:
-                df_clientes_pos = pd.read_excel(archivo_clientes_pos, dtype={'Rut': str})
-            except Exception:
-                df_clientes_pos = pd.DataFrame(columns=["Nombre_Cliente", "Rut", "Telefono", "Email", "Direccion"])
+        try:
+            # Vamos directo a tu tabla de clientes en la nube
+            res_clientes = supabase.table("clientes").select("rut, nombre").execute()
+            df_clientes_pos = pd.DataFrame(res_clientes.data)
+        except Exception as e:
+            st.error(f"⚠️ Error conectando a la base de clientes en la nube: {e}")
+            df_clientes_pos = pd.DataFrame()
 
-        if not df_clientes_pos.empty and "Nombre_Cliente" in df_clientes_pos.columns:
-            col_nom = "Nombre_Cliente"
-            col_rut = "Rut" if "Rut" in df_clientes_pos.columns else df_clientes_pos.columns[1]
-            
-            df_clientes_pos["etiqueta"] = df_clientes_pos[col_nom].astype(str) + " (" + df_clientes_pos[col_rut].astype(str) + ")"
+        if not df_clientes_pos.empty and "nombre" in df_clientes_pos.columns:
+            # Concatenamos el nombre y el RUT usando las columnas de tu imagen
+            df_clientes_pos["etiqueta"] = df_clientes_pos["nombre"].astype(str) + " (" + df_clientes_pos["rut"].astype(str) + ")"
             lista_clientes = df_clientes_pos["etiqueta"].tolist()
+            
+            # Agregamos una opción en blanco al inicio para que no seleccione al primero por defecto
+            lista_clientes.insert(0, "-- Selecciona un cliente --")
             cliente_elegido = st.selectbox("👤 Selecciona un cliente registrado:", lista_clientes)
           
-            if cliente_elegido and " (" in cliente_elegido:
+            if cliente_elegido and cliente_elegido != "-- Selecciona un cliente --" and " (" in cliente_elegido:
                 cliente_nombre = cliente_elegido.split(" (")[0]
                 cliente_rut = cliente_elegido.split(" (")[1].replace(")", "")
         else:
-            st.warning("⚠️ No hay clientes registrados en este negocio. Agrégalos en el módulo de Inventario.")
+            st.warning("⚠️ No hay clientes registrados en la nube. Agrégalos en el módulo de Inventario.")
             col_f1, col_f2 = st.columns(2)
             with col_f1: cliente_nombre = st.text_input("Razón Social / Nombre del Cliente")
             with col_f2: cliente_rut = st.text_input("RUT / Identificación Tributaria")

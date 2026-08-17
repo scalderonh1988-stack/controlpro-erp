@@ -454,7 +454,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     
     st.markdown("""
         <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
-            <strong>📌 Control de Caja Inteligente:</strong> Gestiona tus ingresos generales y activa el interruptor si necesitas separar productos con margen diferenciado (como cigarrillos). <em>Nota: Campos de guardado manual por clic para evitar errores con la tecla Enter.</em>
+            <strong>📌 Control de Caja Inteligente:</strong> Gestiona tus ingresos generales y activa el interruptor si necesitas separar productos con margen diferenciado (como cigarrillos). <em>Nota: Campos optimizados para tipear sin ceros raros y guardado manual por clic.</em>
         </div>
     """, unsafe_allow_html=True)
 
@@ -468,22 +468,22 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if not os.path.exists(archivo_cuadratura):
         pd.DataFrame(columns=columnas_requeridas).to_excel(archivo_cuadratura, index=False)
 
-    # 1. Inputs de Carga Diaria (Fuera de form para evitar el Enter accidental)
+    # 1. Inputs de Carga Diaria con formato entero para evitar ceros decimales
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
     
     st.divider()
     st.markdown("#### 💰 Ingresos Generales de Caja")
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
-        efectivo_c = st.number_input("💵 Efectivo ($)", min_value=0.0, step=100.0, value=0.0)
+        efectivo_c = float(st.number_input("💵 Efectivo ($)", min_value=0, step=1000, value=0, format="%d"))
     with col_f2:
-        transferencia_c = st.number_input("📱 Transferencias ($)", min_value=0.0, step=100.0, value=0.0)
+        transferencia_c = float(st.number_input("📱 Transferencias ($)", min_value=0, step=1000, value=0, format="%d"))
     with col_f3:
-        debito_c = st.number_input("💳 Débito / Tarjetas ($)", min_value=0.0, step=100.0, value=0.0)
+        debito_c = float(st.number_input("💳 Débito / Tarjetas ($)", min_value=0, step=1000, value=0, format="%d"))
 
     col_f4, col_f5 = st.columns(2)
     with col_f4:
-        otros_ingresos_c = st.number_input("➕ Otros Ingresos ($)", min_value=0.0, step=100.0, value=0.0)
+        otros_ingresos_c = float(st.number_input("➕ Otros Ingresos ($)", min_value=0, step=1000, value=0, format="%d"))
     with col_f5:
         markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 
@@ -498,7 +498,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
         st.markdown("#### 🚬 Control Específico de Cigarrillos")
         col_cig1, col_cig2 = st.columns(2)
         with col_cig1:
-            cigarrillos_c = st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0.0, step=100.0, value=0.0)
+            cigarrillos_c = float(st.number_input("🚬 Venta de Cigarrillos ($)", min_value=0, step=1000, value=0, format="%d"))
         with col_cig2:
             markup_cigarros = st.number_input("📉 Markup Específico Cigarrillos (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
 
@@ -552,7 +552,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.success("✅ ¡Cuadratura guardada con éxito!")
             st.rerun()
 
-    # 2. SECCIÓN DE ACUMULADOS Y REPORTES PROGRESIVOS (Reemplaza el espacio blanco)
+    # 2. SECCIÓN DE ACUMULADOS Y REPORTES PROGRESIVOS (Diario, Semanal, Quincenal, Mensual, Histórico)
     st.divider()
     st.markdown("### 📊 Acumulados y Reportes Progresivos")
     
@@ -566,11 +566,9 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             if 'ID' not in df_cuadratura.columns or df_cuadratura['ID'].isna().all():
                 df_cuadratura['ID'] = [str(i) for i in range(len(df_cuadratura))]
 
-            # Convertir Fecha a datetime para cálculos de períodos
             df_cuadratura['Fecha_dt'] = pd.to_datetime(df_cuadratura['Fecha'], errors='coerce')
             hoy = pd.Timestamp.today().normalize()
 
-            # Pestañas de períodos progresivos
             tab_p1, tab_p2, tab_p3, tab_p4, tab_p5 = st.tabs([
                 "📅 Diario (Selección)", "📈 Semanal", "📊 Quincenal", "📆 Mensual", "📚 Histórico Completo"
             ])
@@ -633,7 +631,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                         st.divider()
         else:
             st.info("ℹ️ No hay registros guardados todavía.")
-
+            
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):
     if "mostrar_encabezado_con_home" in globals():
         mostrar_encabezado_con_home("🏦 Conciliación Bancaria y Retiros Protegidos por Markup")

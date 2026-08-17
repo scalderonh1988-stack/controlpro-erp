@@ -3017,7 +3017,7 @@ PAGO: {forma_pago.upper()}
             with st.form("form_agregar_item"):
                 col_cant, col_precio_input = st.columns(2)
                 with col_cant:
-                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, format="%d")
+                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, format="%.2f")
                 with col_precio_input:
                     precio_venta = st.number_input("Precio Unitario ($)", min_value=0.0, step=1.0, value=float(st.session_state.precio_actual_input))
 
@@ -3065,7 +3065,7 @@ PAGO: {forma_pago.upper()}
                 with col_c1: st.text(item["Código"])
                 with col_c2: st.text(item["Descripción"])
                 with col_c3:
-                    nc = st.number_input("Cant", min_value=0.01, step=0.1, value=float(item["Cantidad"]), format="%d", key=f"cant_{i}", label_visibility="collapsed")
+                    nc = st.number_input("Cant", min_value=0.01, step=0.1, value=float(item["Cantidad"]), format="%.2f", key=f"cant_{i}", label_visibility="collapsed")
                     st.session_state.carrito_ventas[i]["Cantidad"] = nc
                     st.session_state.carrito_ventas[i]["Subtotal"] = nc * st.session_state.carrito_ventas[i]["Precio Unitario"]
                 with col_c4:

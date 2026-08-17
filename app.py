@@ -1915,7 +1915,7 @@ elif menu == "📊 Módulo de Finanzas":
        
     with tab_fin3:
         mostrar_modulo_registro_gastos(supabase)
-        
+    # Forzando actualizacion de costos fijos    
     with tab_fin4:
         mostrar_modulo_costos_fijos(ruta_negocio, supabase)
    

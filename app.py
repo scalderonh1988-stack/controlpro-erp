@@ -13,6 +13,7 @@ from supabase import create_client, Client
 from fpdf import FPDF
 from PIL import Image
 from cuadratura import mostrar_modulo_cuadratura_diaria
+from historial_ventas import mostrar_modulo_historial_ventas
 
 def cargar_maestro_proveedores(ruta_negocio):
     archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
@@ -1281,7 +1282,8 @@ elif menu == "📦 Inventario y Productos":
                     except Exception as e:
                         st.error(f"❌ Error al guardar en Supabase: {e}")
 
-                    
+elif menu == "📚 Historial de Ventas":
+    mostrar_modulo_historial_ventas(ruta_negocio)                    
 
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero")

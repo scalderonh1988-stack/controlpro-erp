@@ -7,7 +7,7 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
     st.markdown("### 📚 Historial de Documentos y Ventas Emitidas")
     st.markdown("📌 **Archivo General:** Explora el registro histórico con filtros avanzados por tipo de documento, cliente, fechas y estados.")
 
-    # Archivo base de ventas (ajustable según tus registros)
+    # Archivo base de ventas
     archivo_ventas = os.path.join(ruta_negocio, "Ventas_Diarias.xlsx")
     if not os.path.exists(archivo_ventas):
         archivo_ventas = os.path.join(ruta_negocio, "Libro_Ventas_2026_07.xlsx")
@@ -26,11 +26,11 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
         st.info("ℹ️ El historial de ventas está vacío actualmente.")
         return
 
-    # Normalizar columnas de fecha si existen para que el filtro funcione bien
+    # Normalizar columnas de fecha si existen
     if 'Fecha' in df_ventas.columns:
         df_ventas['Fecha_dt'] = pd.to_datetime(df_ventas['Fecha'], errors='coerce')
 
-    # 📂 "CARPETAS" O PESTAÑAS DE NAVEGACIÓN
+    # 📂 PESTAÑAS O CARPETAS DE NAVEGACIÓN
     tab_gen, tab_doc, tab_cli, tab_pag = st.tabs([
         "📂 Vista General", 
         "📄 Por Tipo de Documento", 
@@ -38,14 +38,13 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
         "💳 Estado de Pago"
     ])
 
-    # Filtros comunes globales o en barra lateral para acotar la búsqueda
     st.markdown("---")
     st.markdown("#### 🔍 Panel de Filtros Dinámicos")
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         busqueda_libre = st.text_input("🔎 Buscar palabra clave (folio, producto, etc.)", value="")
     with col_f2:
-        limite_filas = st.slider("📄 Mostrar cantidad máxima de registros", min_value=10, max_value=500, value=50, step=10)
+        limite_filas = st.slider("📄 Mostrar cantidad máxima de registros", min_value=10, max_value=500, value=50, step=10, format="%d")
 
     # Filtrado base por texto libre
     df_filtrado = df_ventas.copy()
@@ -59,7 +58,6 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
 
     with tab_doc:
         st.markdown("#### 📄 Filtrar por Tipo de Documento")
-        # Buscar columna que parezca tipo de documento
         col_doc = next((c for c in df_ventas.columns if 'tipo' in c.lower() or 'documento' in c.lower()), None)
         if col_doc:
             tipos_disponibles = df_ventas[col_doc].dropna().unique().tolist()
@@ -70,7 +68,7 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
                 df_doc = df_doc[df_doc[col_doc] == doc_seleccionado]
             st.dataframe(df_doc.tail(limite_filas), use_container_width=True)
         else:
-            st.info("ℹ️ No se detectó una columna específica de 'Tipo de Documento' en este archivo. Mostrando vista general.")
+            st.info("ℹ️ No se detectó una columna específica de 'Tipo de Documento'. Mostrando vista general.")
             st.dataframe(df_filtrado.tail(limite_filas), use_container_width=True)
 
     with tab_cli:
@@ -85,7 +83,7 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
                 df_cli = df_cli[df_cli[col_cli] == cli_seleccionado]
             st.dataframe(df_cli.tail(limite_filas), use_container_width=True)
         else:
-            st.info("ℹ️ No se detectó una columna específica de 'Cliente' en este archivo.")
+            st.info("ℹ️ No se detectó una columna específica de 'Cliente'.")
             st.dataframe(df_filtrado.tail(limite_filas), use_container_width=True)
 
     with tab_pag:
@@ -100,10 +98,10 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
                 df_pag = df_pag[df_pag[col_pag] == pag_seleccionado]
             st.dataframe(df_pag.tail(limite_filas), use_container_width=True)
         else:
-            st.info("ℹ️ No se detectó una columna específica de 'Estado de Pago' en este archivo.")
+            st.info("ℹ️ No se detectó una columna específica de 'Estado de Pago'.")
             st.dataframe(df_filtrado.tail(limite_filas), use_container_width=True)
 
-    # Botón global de descarga para el reporte filtrado
+    # Botón global de descarga
     st.divider()
     st.download_button(
         label="📥 Descargar Reporte Filtrado en Excel",

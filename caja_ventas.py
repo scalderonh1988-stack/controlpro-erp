@@ -1,145 +1,128 @@
-import os
-import csv
+import streamlit as st
+import pandas as pd
 from datetime import datetime
-from supabase import create_client, Client
+import uuid
+# Importamos la conexión a tu base de datos y la seguridad de negocio
+from data_manager import supabase, get_current_tenant
 
-# --- CONFIGURACIÓN DE LA NUBE (SUPABASE) ---
-SUPABASE_URL = "https://dmkjlcjrobszhwasrofc.supabase.co"
-SUPABASE_KEY = "sb_publishable_uGVmMWz7T9aShxTMm_Vrgw_QFvRyTmH"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+def mostrar_modulo_ventas(ruta_negocio):
+    # --- BOTÓN DE VOLVER AL HOME ---
+    if st.button("🏠 Volver al Home", use_container_width=True):
+        st.session_state["modulo_activo"] = "home"
+        st.rerun()
+    st.markdown("---")
 
-def buscar_producto_en_nube(rut_empresa, codigo_barras):
-    """Busca un producto en Supabase filtrando estrictamente por RUT y Código."""
-    try:
-        respuesta = supabase.table("productos") \
-            .select("*") \
-            .eq("rut_empresa", str(rut_empresa).strip()) \
-            .eq("codigo", str(codigo_barras).strip()) \
-            .execute()
-        
-        if respuesta.data and len(respuesta.data) > 0:
-            return respuesta.data[0] 
-        else:
-            return None 
-    except Exception as e:
-        print(f"❌ Error de conexión al buscar producto: {e}")
-        return None
+    st.markdown("### 💰 Módulo de Ventas (POS)")
+    st.write("Registra tus ventas y actualiza tu inventario en tiempo real (100% Nube).")
 
-def actualizar_stock_en_nube(rut_empresa, codigo_barras, nuevo_stock):
-    """Actualiza el stock del producto directamente en Supabase."""
-    try:
-        supabase.table("productos") \
-            .update({"stock": float(nuevo_stock)}) \
-            .eq("rut_empresa", str(rut_empresa).strip()) \
-            .eq("codigo", str(codigo_barras).strip()) \
-            .execute()
-    except Exception as e:
-        print(f"❌ Error al actualizar stock en la nube: {e}")
+    tenant_id = get_current_tenant()
+    if not tenant_id:
+        st.error("❌ No se ha identificado el negocio. Por favor, inicia sesión nuevamente.")
+        return
 
-print("🛒 Iniciando Terminal de Caja y Ventas (100% Nube)...")
+    # 1. Inicializar el Carrito de Compras en la memoria temporal
+    if "carrito_pos" not in st.session_state:
+        st.session_state["carrito_pos"] = []
 
-# --- SEGURIDAD: SOLICITAMOS EL RUT AL INICIAR EL TURNO ---
-print("\n🔒 Control de Seguridad")
-RUT_NEGOCIO = input("🔑 Ingresa el RUT de este local (ej: 12345678-9) para iniciar turno: ").strip()
+    # 2. Interfaz del Buscador
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        codigo_ingresado = st.text_input("🔍 Escanea o escribe el código de barras:", key="input_codigo_pos")
+    with col2:
+        st.write("") # Espaciador para alinear el botón
+        st.write("")
+        btn_buscar = st.button("Agregar al Carrito 🛒", use_container_width=True)
 
-if not RUT_NEGOCIO:
-    print("❌ Error: Debes ingresar un RUT válido para operar la caja.")
-    exit()
-
-print("\n---------------------------------------------------------")
-print(f"🟢 CAJA ABIERTA - LOCAL: {RUT_NEGOCIO}")
-print("---------------------------------------------------------")
-print("Instrucciones: Ingresa el código de barras del producto (o escribe 'salir' para cerrar caja).")
-
-carrito = []
-
-while True:
-    codigo_ingresado = input("\nScan Código / Escribir Código: ").strip()
-
-    if codigo_ingresado.lower() == 'salir':
-        break
-
-    if not codigo_ingresado:
-        continue
-
-    # --- 1. BUSCAMOS EL PRODUCTO EN SUPABASE ---
-    producto = buscar_producto_en_nube(RUT_NEGOCIO, codigo_ingresado)
-
-    if not producto:
-        print(f"❌ Producto con código '{codigo_ingresado}' no encontrado para este local.")
-    else:
-        # Extraemos los datos de la nube con seguridad
-        descripcion = producto.get('descripcion') or "Sin descripción"
-        
+    # 3. Lógica para buscar el producto en Supabase
+    if btn_buscar and codigo_ingresado:
         try:
-            precio_venta = float(producto.get('precio_venta') or 0.0)
-        except Exception:
-            precio_venta = 0.0
+            # Consulta directa a la nube (solo busca productos de este local)
+            res = supabase.table("productos").select("*").eq("rut_empresa", str(tenant_id)).eq("codigo", str(codigo_ingresado).strip()).execute()
             
-        try:
-            stock_actual = float(producto.get('stock') or 0.0)
-        except Exception:
-            stock_actual = 0.0
+            if res.data and len(res.data) > 0:
+                producto = res.data[0]
+                stock_actual = float(producto.get("stock", 0))
+                
+                if stock_actual <= 0:
+                    st.warning(f"⚠️ El producto '{producto.get('descripcion')}' está sin stock en el inventario.")
+                else:
+                    # Agregamos el producto al carrito virtual
+                    nuevo_item = {
+                        "id_temp": str(uuid.uuid4()), # ID interno para que no se mezclen
+                        "codigo": producto.get("codigo"),
+                        "descripcion": producto.get("descripcion", "Sin descripción"),
+                        "precio": float(producto.get("precio_venta", 0)),
+                        "cantidad": 1.0,
+                        "subtotal": float(producto.get("precio_venta", 0)),
+                        "stock_actual": stock_actual
+                    }
+                    st.session_state["carrito_pos"].append(nuevo_item)
+                    st.success(f"✅ {nuevo_item['descripcion']} agregado.")
+            else:
+                st.error("❌ Producto no encontrado en la base de datos.")
+        except Exception as e:
+            st.error(f"❌ Error al conectar con Supabase: {e}")
 
-        print(f"📦 Producto: {descripcion}")
-        print(f"💵 Precio Unitario: ${precio_venta:,.2f} | Stock Disponible: {stock_actual}")
-
-        if stock_actual <= 0:
-            print("⚠️ ¡ALERTA! Producto sin stock disponible para la venta.")
-            continuar = input("¿Desea vender de todas formas? (s/n): ").strip().lower()
-            if continuar != 's':
-                continue
-
-        try:
-            entrada_cant = input("Cantidad a vender (por defecto 1): ").strip()
-            cantidad_comprada = float(entrada_cant) if entrada_cant else 1.0
-            if cantidad_comprada <= 0:
-                cantidad_comprada = 1.0
-        except ValueError:
-            cantidad_comprada = 1.0
-
-        # Calculamos el nuevo stock
-        nuevo_stock = stock_actual - cantidad_comprada
+    # 4. Mostrar el Carrito y procesar el Pago
+    if st.session_state["carrito_pos"]:
+        st.markdown("#### 🛒 Detalle del Ticket")
         
-        # --- 2. ACTUALIZAMOS EL STOCK EN SUPABASE INMEDIATAMENTE ---
-        actualizar_stock_en_nube(RUT_NEGOCIO, codigo_ingresado, nuevo_stock)
+        # Transformamos el carrito en una tabla visual
+        df_carrito = pd.DataFrame(st.session_state["carrito_pos"])
+        st.dataframe(df_carrito[["descripcion", "precio", "cantidad", "subtotal"]], use_container_width=True)
 
-        total_linea = precio_venta * cantidad_comprada
+        total_venta = df_carrito["subtotal"].sum()
+        st.markdown(f"### 💵 Total a Pagar: ${total_venta:,.0f}")
+
+        st.markdown("---")
         
-        # --- 3. PREPARAMOS EL DATO PARA ENVIAR LA VENTA AL CERRAR ---
-        carrito.append({
-            "rut_empresa": RUT_NEGOCIO,
-            "fecha": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "detalle": f"{descripcion} (Cant: {cantidad_comprada})",
-            "monto": float(total_linea),
-            "metodo_pago": "Efectivo",
-            "documento": "Ticket de Venta"
-        })
+        # Opciones de pago
+        col_pago, col_doc, col_cobrar = st.columns(3)
+        with col_pago:
+            metodo_pago = st.selectbox("Método de Pago", ["Efectivo", "Tarjeta / Transbank", "Transferencia"])
+        with col_doc:
+            tipo_doc = st.selectbox("Documento", ["Boleta", "Factura"])
+        with col_cobrar:
+            st.write("")
+            st.write("")
+            
+            # --- EL BOTÓN MÁGICO QUE ENVÍA A SUPABASE ---
+            if st.button("🚀 CONFIRMAR Y COBRAR", type="primary", use_container_width=True):
+                
+                # Generamos un identificador único para agrupar esta venta
+                folio_venta = f"TX-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                fecha_hoy = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        print(f"✅ Agregado al ticket. Subtotal línea: ${total_linea:,.2f} | Nuevo Stock en Nube: {nuevo_stock}")
+                # Preparamos la bolsa de datos para enviar a Supabase
+                registros_para_nube = []
+                for item in st.session_state["carrito_pos"]:
+                    registros_para_nube.append({
+                        "folio": folio_venta,
+                        "rut_empresa": str(tenant_id),
+                        "fecha": fecha_hoy,
+                        "detalle": f"{item['descripcion']} (Cant: {item['cantidad']})",
+                        "monto": item["subtotal"],
+                        "metodo_pago": metodo_pago,
+                        "documento": tipo_doc
+                    })
 
-# Al cerrar caja
-if carrito:
-    print("\n⏳ Subiendo ventas a la nube (Supabase)...")
-    try:
-        supabase.table("ventas").insert(carrito).execute()
-        print("✅ ¡Ventas registradas con éxito en la nube!")
-    except Exception as e:
-        print(f"❌ Error al conectar con la nube: {e}")
-        
-        # Guardado de emergencia en CSV si falla el internet al final
-        try:
-            with open("Respaldo_Ventas_Emergencia.csv", "w", newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=carrito[0].keys())
-                writer.writeheader()
-                writer.writerows(carrito)
-            print("⚠️ Falló el internet. Las ventas se guardaron localmente en 'Respaldo_Ventas_Emergencia.csv'.")
-        except Exception as csv_err:
-            print(f"❌ No se pudo crear el respaldo local: {csv_err}")
+                try:
+                    # 1. Insertamos TODA la venta en la tabla 'ventas' de una sola vez
+                    supabase.table("ventas").insert(registros_para_nube).execute()
 
-    print("\n---------------------------------------------------------")
-    print("🏁 CAJA CERRADA CON ÉXITO")
-    print("📁 Inventario y ventas sincronizados al 100% en la Nube.")
-    print("---------------------------------------------------------")
-else:
-    print("\nℹ️ No se registraron ventas en esta sesión de caja.")
+                    # 2. Descontamos el stock en la tabla 'productos'
+                    for item in st.session_state["carrito_pos"]:
+                        nuevo_stock = item["stock_actual"] - item["cantidad"]
+                        supabase.table("productos").update({"stock": float(nuevo_stock)}).eq("rut_empresa", str(tenant_id)).eq("codigo", item["codigo"]).execute()
+                    
+                    st.success(f"🎉 ¡Venta cobrada con éxito! (Folio: {folio_venta})")
+                    st.info("📁 Los datos ya están seguros en Supabase.")
+                    
+                    # Limpiamos la pantalla para el siguiente cliente
+                    st.session_state["carrito_pos"] = []
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error al enviar la venta a la nube: {e}")
+    else:
+        st.info("👉 El carrito está vacío. Ingresa un código de producto para comenzar a cobrar.")

@@ -1102,6 +1102,7 @@ if menu == "🏠 Home / Bienvenida":
         {"id": "cuadratura", "nombre_ref": "Cuadratura Diaria", "label": "📒 Cuadratura Diaria"},
         {"id": "cobrar", "nombre_ref": "Cuentas por Cobrar", "label": "📑 Cuentas por Cobrar"},
         {"id": "conci", "nombre_ref": "Conciliación y Retiros Seguros", "label": "🏦 Conciliación y Retiros Seguros"},
+        {"id": "historial", "nombre_ref": "Historial de Ventas", "label": "📚 Historial de Ventas"},
         {"id": "report", "nombre_ref": "Reportes y Analítica", "label": "📈 Reportes y Analítica"},
         {"id": "conf", "nombre_ref": "Configuración General", "label": "⚙️ Configuración General"}
     ]

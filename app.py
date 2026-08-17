@@ -1920,7 +1920,6 @@ elif menu == "📊 Módulo de Finanzas":
         mostrar_modulo_costos_fijos(rut_actual, supabase)
 
     
-
 # ----------------- SECCIÓN INFORMES Y MOVIMIENTOS -----------------
 elif menu == "📈 Informes y Movimientos (Kardex)":
     mostrar_encabezado_con_home("📈 Módulo Unificado de Informes y Movimientos")

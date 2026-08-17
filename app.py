@@ -631,7 +631,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
                         st.divider()
         else:
             st.info("ℹ️ No hay registros guardados todavía.")
-            
+
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):
     if "mostrar_encabezado_con_home" in globals():
         mostrar_encabezado_con_home("🏦 Conciliación Bancaria y Retiros Protegidos por Markup")

@@ -3209,5 +3209,5 @@ elif menu == "🔑 Control Maestro de Licencias":
     else:
         st.warning("⚠️ No se encontraron registros de empresas en Supabase.")
 
-elif menu == "🔄 Notas de Crédito":
+elif menu == "🔄 Notas de Crédito" or st.session_state.get("modulo_activo") == "nc":
     mostrar_modulo_notas_credito(ruta_negocio)

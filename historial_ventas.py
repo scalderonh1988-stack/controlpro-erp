@@ -5,6 +5,12 @@ import os
 import io
 
 def mostrar_modulo_historial_ventas(ruta_negocio):
+    # Botón para volver al Home fijo
+    if st.button("🏠 Volver al Home", use_container_width=True):
+        st.session_state["modulo_activo"] = "home"
+        st.rerun()
+    
+    st.markdown("---")
     st.markdown("### 📚 Historial de Documentos y Ventas Emitidas")
     st.markdown("📌 **Archivo General:** Explora el registro histórico con filtros avanzados, tipos de documento y descarga de comprobantes individuales.")
 

@@ -1917,7 +1917,7 @@ elif menu == "📊 Módulo de Finanzas":
         mostrar_modulo_registro_gastos(supabase)
         
     with tab_fin4:
-        mostrar_modulo_costos_fijos(rut_actual, supabase)
+        mostrar_modulo_costos_fijos(ruta_negocio, supabase)
    
 # ----------------- SECCIÓN INFORMES Y MOVIMIENTOS -----------------
 elif menu == "📈 Informes y Movimientos (Kardex)":

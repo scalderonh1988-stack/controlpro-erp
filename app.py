@@ -454,7 +454,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     
     st.markdown("""
         <div style='background-color: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 15px;'>
-            <strong>📌 Control de Caja Inteligente:</strong> Gestiona tus ingresos generales y activa el interruptor si necesitas separar productos con margen diferenciado (como cigarrillos). <em>Nota: Campos optimizados para tipear sin ceros raros y guardado manual por clic.</em>
+            <strong>📌 Control de Caja Inteligente:</strong> Gestiona tus ingresos generales y activa el interruptor si necesitas separar productos con margen diferenciado (como cigarrillos).
         </div>
     """, unsafe_allow_html=True)
 
@@ -468,7 +468,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if not os.path.exists(archivo_cuadratura):
         pd.DataFrame(columns=columnas_requeridas).to_excel(archivo_cuadratura, index=False)
 
-    # 1. Inputs de Carga Diaria con formato entero para evitar ceros decimales
+    # 1. Inputs de Carga Diaria con números limpios
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
     
     st.divider()
@@ -552,8 +552,8 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.success("✅ ¡Cuadratura guardada con éxito!")
             st.rerun()
 
-    # 2. SECCIÓN DE ACUMULADOS Y REPORTES PROGRESIVOS (Diario, Semanal, Quincenal, Mensual, Histórico)
-    st.divider()
+    # 2. SECCIÓN DE ACUMULADOS Y REPORTES PROGRESIVOS DIRECTOS
+    st.markdown("---")
     st.markdown("### 📊 Acumulados y Reportes Progresivos")
     
     if os.path.exists(archivo_cuadratura):

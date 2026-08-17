@@ -460,12 +460,14 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
 
     archivo_cuadratura = os.path.join(ruta_negocio, "Cuadratura_Diaria.xlsx")
     
-    # Inicializar archivo con columna ID si no existe
+    columnas_requeridas = [
+        'ID', 'Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 
+        'VentaTotal', 'MarkupGeneral', 'MarkupCigarros', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones'
+    ]
+
+    # Inicializar archivo si no existe
     if not os.path.exists(archivo_cuadratura):
-        pd.DataFrame(columns=[
-            'ID', 'Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 
-            'VentaTotal', 'MarkupGeneral', 'MarkupCigarros', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones'
-        ]).to_excel(archivo_cuadratura, index=False)
+        pd.DataFrame(columns=columnas_requeridas).to_excel(archivo_cuadratura, index=False)
 
     # 1. Inputs fuera de st.form para evitar que la tecla Enter guarde por accidente
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
@@ -527,7 +529,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
 
     observaciones_c = st.text_input("📝 Observaciones del Cierre de Caja", value="Cierre normal")
 
-    # Botón principal independiente (fuera de form, requiere clic consciente)
     btn_guardar_cuat = st.button("💾 Guardar Cuadratura y Retiro", type="primary")
 
     if btn_guardar_cuat:
@@ -535,8 +536,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.warning("⚠️ Debes ingresar al menos un monto en los ingresos de caja.")
         else:
             df_cuat_ant = pd.read_excel(archivo_cuadratura)
-            
-            # Generar ID único basado en timestamp actual para control de borrado
             nuevo_id = str(pd.Timestamp.now().timestamp())
             
             nuevo_registro = pd.DataFrame([{
@@ -564,28 +563,31 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if os.path.exists(archivo_cuadratura):
         df_cuadratura = pd.read_excel(archivo_cuadratura)
         if not df_cuadratura.empty:
-            # Asegurar compatibilidad si el excel anterior no tenía la columna ID
-            if 'ID' not in df_cuadratura.columns:
+            # Blindaje contra columnas faltantes en registros antiguos
+            for col in columnas_requeridas:
+                if col not in df_cuadratura.columns:
+                    df_cuadratura[col] = ""
+            
+            if 'ID' not in df_cuadratura.columns or df_cuadratura['ID'].isna().all():
                 df_cuadratura['ID'] = [str(i) for i in range(len(df_cuadratura))]
             
-            # Mostrar tabla interactiva con opción de eliminación por fila
             for index, row in df_cuadratura.iterrows():
                 with st.container():
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 3, 1])
                     with col_h1:
                         st.markdown(f"**Fecha:** {row['Fecha']}")
                     with col_h2:
-                        # Manejo seguro si VentaTotal es nulo
                         v_total = row['VentaTotal'] if pd.notna(row['VentaTotal']) else 0.0
                         st.markdown(f"**Total:** ${v_total:,.2f}")
-                        st.caption(f"Obs: {row['Observaciones']}")
+                        obs = row['Observaciones'] if pd.notna(row['Observaciones']) else "Sin obs"
+                        st.caption(f"Obs: {obs}")
                     with col_h3:
                         u_retirable = row['UtilidadRetirable'] if pd.notna(row['UtilidadRetirable']) else 0.0
                         st.markdown(f"**Utilidad:** ${u_retirable:,.2f}")
                     with col_h4:
-                        if st.button("🗑️", key=f"del_cuat_{row['ID']}_{index}"):
-                            # Filtrar el dataframe eliminando la fila seleccionada
-                            df_filtrado = df_cuadratura[df_cuadratura['ID'] != str(row['ID'])]
+                        row_id = str(row['ID']) if pd.notna(row['ID']) else str(index)
+                        if st.button("🗑️", key=f"del_cuat_{row_id}_{index}"):
+                            df_filtrado = df_cuadratura[df_cuadratura['ID'].astype(str) != row_id]
                             df_filtrado.to_excel(archivo_cuadratura, index=False)
                             st.success("🗑️ ¡Registro eliminado con éxito!")
                             st.rerun()

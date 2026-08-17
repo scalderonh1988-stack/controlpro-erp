@@ -3112,10 +3112,6 @@ PAGO: {forma_pago.upper()}
 elif menu == "📑 Cuentas por Cobrar":
     mostrar_modulo_cuentas_por_cobrar(ruta_negocio)
 
-elif menu == "📒 Cuadratura Diaria":
-    mostrar_encabezado_con_home("📒 Cuaderno de Cuadratura y Caja Diaria")
-    mostrar_modulo_cuadratura_diaria(ruta_negocio)
-
 elif menu == "🏦 Conciliación y Retiros Seguros": 
     mostrar_modulo_conciliacion_retiros(ruta_negocio)
 

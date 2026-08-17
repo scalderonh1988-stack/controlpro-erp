@@ -1900,10 +1900,11 @@ elif menu == "📉 Mermas y Ajustes":
 elif menu == "📊 Módulo de Finanzas":
     mostrar_encabezado_con_home("📊 Panel de Control Financiero y Gastos")
    
-    tab_fin1, tab_fin2, tab_fin3 = st.tabs([
+    tab_fin1, tab_fin2, tab_fin3, tab_fin4 = st.tabs([
         "💳 Cuentas por Pagar",
         "📅 Calendario de Pagos",
-        "💸 Registro de Gastos"
+        "💸 Registro de Gastos",
+        "🏢 Costos Fijos y Créditos"
     ])
    
     with tab_fin1:
@@ -1914,6 +1915,11 @@ elif menu == "📊 Módulo de Finanzas":
        
     with tab_fin3:
         mostrar_modulo_registro_gastos(supabase)
+        
+    with tab_fin4:
+        mostrar_modulo_costos_fijos(rut_actual, supabase)
+
+    
 
 # ----------------- SECCIÓN INFORMES Y MOVIMIENTOS -----------------
 elif menu == "📈 Informes y Movimientos (Kardex)":

@@ -1525,166 +1525,180 @@ elif menu == "📊 Dashboard Ejecutivo":
 # ----------------- SECCIÓN INVENTARIO GENERAL -----------------
 elif menu == "📦 Inventario y Productos":
     mostrar_encabezado_con_home("Gestión de Bases de Datos")
+    
+    # Usamos tu variable de sesión para el RUT del local
+    rut_actual = st.session_state.get("negocio_seleccionado")
+    if not rut_actual:
+        st.error("❌ No se ha identificado el negocio. Por favor, inicia sesión.")
+        st.stop()
    
     tab_prod, tab_cli, tab_prov = st.tabs(["📦 Productos / Inventario", "👥 Clientes", "🚚 Proveedores"])
    
+    # ==========================================
+    # PESTAÑA 1: PRODUCTOS (100% NUBE)
+    # ==========================================
     with tab_prod:
         st.markdown("### 📦 Administración de Productos (Nube)")
-        rut_actual = st.session_state.get("negocio_seleccionado")
-        try:
-            res_inv2 = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).limit(10000).execute()
-            df_base_nube = pd.DataFrame(res_inv2.data)
-            st.success(f"✅ Base de datos conectada con éxito. Total de productos registrados: {len(df_base_nube)}")
-           
-            st.markdown("#### 📂 Listado General de Inventario")
-            if not df_base_nube.empty:
-                h1, h2, h3, h4, h5, h6 = st.columns([2, 3, 1, 1, 1, 0.8])
-                with h1: st.markdown("**Código**")
-                with h2: st.markdown("**Descripción**")
-                with h3: st.markdown("**Costo**")
-                with h4: st.markdown("**Precio Venta**")
-                with h5: st.markdown("**Stock**")
-                with h6: st.markdown("**Acción**")
-                st.markdown("---")
+        
+        # --- Formulario de Creación ---
+        with st.expander("➕ Registrar Nuevo Producto", expanded=False):
+            with st.form("form_nuevo_producto", clear_on_submit=True):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    codigo = st.text_input("Código de Barras (SKU) *")
+                    dun14 = st.text_input("Código DUN-14 (Caja/Display)")
+                    descripcion = st.text_input("Descripción *")
+                    categoria = st.text_input("Categoría")
+                with col2:
+                    formato_envase = st.text_input("Formato Envase")
+                    unidad = st.text_input("Unidad de Medida")
+                    costo = st.number_input("Costo Neto ($) *", min_value=0.0, step=100.0)
+                    precio_venta = st.number_input("Precio Venta ($) *", min_value=0.0, step=100.0)
+                with col3:
+                    stock_inicial = st.number_input("Stock Inicial *", min_value=0.0, step=1.0)
+                    impuesto_especifico = st.number_input("Impuesto Específico (%)", min_value=0.0)
+                    es_exento = st.checkbox("Exento de IVA")
+                    disponible_venta = st.checkbox("Disponible Venta", value=True)
+                    activo = st.checkbox("Activo", value=True)
 
-                for idx_p, row_p in df_base_nube.iterrows():
-                    val_cod = str(row_p.get('codigo', ''))
-                    val_desc = str(row_p.get('descripcion', ''))
-                    val_costo = float(row_p.get('costo', 0))
-                    val_precio = float(row_p.get('precio_venta', 0))
-                    val_stock = float(row_p.get('stock', 0))
-
-                    c1, c2, c3, c4, c5, c6 = st.columns([2, 3, 1, 1, 1, 0.8])
-                    with c1: st.write(val_cod)
-                    with c2: st.write(val_desc)
-                    with c3: st.write(f"${val_costo:,.0f}")
-                    with c4: st.write(f"${val_precio:,.0f}")
-                    with c5: st.write(str(val_stock))
-                    with c6:
-                        if st.button("🗑️", key=f"del_prod_inv2_{val_cod}", help="Eliminar este producto"):
-                            supabase.table("productos").delete().eq("rut_empresa", rut_actual).eq("codigo", val_cod).execute()
-                            st.success("✅ Producto eliminado correctamente de la Nube.")
+                if st.form_submit_button("💾 Guardar Producto", type="primary"):
+                    if not codigo or not descripcion:
+                        st.warning("⚠️ Código y Descripción son obligatorios.")
+                    else:
+                        try:
+                            nuevo_prod = {
+                                "rut_empresa": str(rut_actual), "codigo": str(codigo).strip(),
+                                "descripcion": str(descripcion).strip(), "formato_envase": formato_envase,
+                                "unidad": unidad, "costo": float(costo), "precio_venta": float(precio_venta),
+                                "dun14": dun14, "categoria": categoria, "es_exento": bool(es_exento),
+                                "impuesto_especifico": float(impuesto_especifico),
+                                "disponible_venta": bool(disponible_venta), "activo": bool(activo),
+                                "stock": float(stock_inicial)
+                            }
+                            supabase.table("productos").insert(nuevo_prod).execute()
+                            st.success(f"✅ Producto '{descripcion}' guardado en la Nube.")
                             st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar (¿Código duplicado?): {e}")
+
+        # --- Catálogo Visual ---
+        st.markdown("#### 📋 Catálogo de Inventario Actual")
+        try:
+            res_inv2 = supabase.table("productos").select("*").eq("rut_empresa", rut_actual).order("id", desc=True).execute()
+            df_base_nube = pd.DataFrame(res_inv2.data)
+            
+            if not df_base_nube.empty:
+                # Ordenamos las columnas para la vista
+                cols = ['codigo', 'descripcion', 'stock', 'precio_venta', 'costo', 'categoria', 'formato_envase', 'es_exento', 'disponible_venta']
+                df_mostrar = df_base_nube[[c for c in cols if c in df_base_nube.columns]]
+                st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+                
+                # Botón de borrado rápido (opcional, para mantener tu lógica anterior)
+                with st.expander("🗑️ Zona de Peligro: Eliminar Producto"):
+                    cod_eliminar = st.selectbox("Selecciona el producto a eliminar:", df_base_nube['codigo'].astype(str) + " - " + df_base_nube['descripcion'])
+                    if st.button("Eliminar Producto Definitivamente", type="secondary"):
+                        codigo_real = cod_eliminar.split(" - ")[0]
+                        supabase.table("productos").delete().eq("rut_empresa", rut_actual).eq("codigo", codigo_real).execute()
+                        st.success("✅ Producto eliminado.")
+                        st.rerun()
             else:
-                st.info("ℹ️ No hay productos cargados en la base de datos.")
+                st.info("ℹ️ No hay productos cargados en este local.")
         except Exception as e:
-            st.error(f"⚠️ Error conectando con la base de datos: {e}")
-       
+            st.error(f"⚠️ Error conectando: {e}")
+
+    # ==========================================
+    # PESTAÑA 2: CLIENTES (100% NUBE)
+    # ==========================================
     with tab_cli:
-        st.markdown("### 👥 Administración de Clientes")
+        st.markdown("### 👥 Administración de Clientes (Nube)")
        
         with st.form("form_nuevo_cliente", clear_on_submit=True):
             st.markdown("#### Registrar Nuevo Cliente")
             col1, col2 = st.columns(2)
             with col1:
-                rut_cliente = st.text_input("RUT / Identificación")
-                nombre_cliente = st.text_input("Nombre / Razón Social")
+                rut_cliente = st.text_input("RUT / Identificación *")
+                nombre_cliente = st.text_input("Nombre / Razón Social *")
                 telefono_cliente = st.text_input("Teléfono")
             with col2:
                 correo_cliente = st.text_input("Correo Electrónico")
                 direccion_cliente = st.text_input("Dirección")
            
-            submitted = st.form_submit_button("💾 Guardar Cliente")
-           
-            if submitted:
+            if st.form_submit_button("💾 Guardar Cliente en Nube"):
                 if rut_cliente and nombre_cliente:
-                    nuevo_registro = {
-                        "RUT": rut_cliente,
-                        "Nombre": nombre_cliente,
-                        "Teléfono": telefono_cliente,
-                        "Correo": correo_cliente,
-                        "Dirección": direccion_cliente
-                    }
-                   
-                    path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
-                   
                     try:
-                        df_clientes = pd.read_excel(path_db, sheet_name="BD_Clientes", dtype={'RUT': str})
-                    except Exception:
-                        df_clientes = pd.DataFrame(columns=["RUT", "Nombre", "Teléfono", "Correo", "Dirección"])
-                   
-                    if not df_clientes.empty and rut_cliente in df_clientes['RUT'].values:
-                        st.error("⚠️ Ya existe un cliente registrado con este RUT.")
-                    else:
-                        df_nuevo = pd.DataFrame([nuevo_registro])
-                        df_clientes = pd.concat([df_clientes, df_nuevo], ignore_index=True)
-                       
-                        with pd.ExcelWriter(path_db, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-                            df_clientes.to_excel(writer, sheet_name="BD_Clientes", index=False)
-                       
+                        nuevo_cliente = {
+                            "id_negocio": str(rut_actual), # En tu BD vi que usas id_negocio para clientes
+                            "rut": str(rut_cliente).strip(),
+                            "nombre": str(nombre_cliente).strip(),
+                            "telefono": telefono_cliente,
+                            "correo": correo_cliente,
+                            "direccion": direccion_cliente
+                        }
+                        supabase.table("clientes").insert(nuevo_cliente).execute()
                         st.success(f"✅ Cliente '{nombre_cliente}' guardado exitosamente.")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar (¿El RUT ya existe?): {e}")
                 else:
-                    st.warning("⚠️ Los campos RUT y Nombre/Razón Social son obligatorios.")
+                    st.warning("⚠️ RUT y Nombre son obligatorios.")
 
-        st.markdown("#### 📋 Listado de Clientes Registrados")
-        path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
+        st.markdown("#### 📋 Listado de Clientes")
         try:
-            df_ver_clientes = pd.read_excel(path_db, sheet_name="BD_Clientes", dtype={'RUT': str})
-            if not df_ver_clientes.empty:
-                st.dataframe(df_ver_clientes, use_container_width=True)
+            res_cli = supabase.table("clientes").select("rut, nombre, telefono, correo, direccion").eq("id_negocio", rut_actual).execute()
+            df_clientes = pd.DataFrame(res_cli.data)
+            if not df_clientes.empty:
+                st.dataframe(df_clientes, use_container_width=True, hide_index=True)
             else:
-                st.info("No hay clientes registrados todavía.")
-        except Exception:
-            st.info("Aún no se ha creado la hoja 'BD_Clientes' en el archivo Excel.")
+                st.info("No hay clientes registrados en la nube todavía.")
+        except Exception as e:
+            st.error(f"Error conectando a clientes: {e}")
        
+    # ==========================================
+    # PESTAÑA 3: PROVEEDORES (100% NUBE)
+    # ==========================================
     with tab_prov:
-        st.markdown("### 🚚 Administración de Proveedores")
+        st.markdown("### 🚚 Administración de Proveedores (Nube)")
        
         with st.form("form_nuevo_proveedor", clear_on_submit=True):
             st.markdown("#### Registrar Nuevo Proveedor")
             col1, col2 = st.columns(2)
             with col1:
-                rut_proveedor = st.text_input("RUT / Identificación Proveedor")
-                nombre_proveedor = st.text_input("Nombre / Razón Social Proveedor")
-                telefono_proveedor = st.text_input("Teléfono Proveedor")
+                rut_proveedor = st.text_input("RUT Proveedor *")
+                nombre_proveedor = st.text_input("Razón Social Proveedor *")
+                telefono_proveedor = st.text_input("Teléfono")
             with col2:
-                correo_proveedor = st.text_input("Correo Electrónico Proveedor")
-                nombre_vendedor = st.text_input("Nombre de Vendedor")
+                correo_proveedor = st.text_input("Correo Electrónico")
+                nombre_vendedor = st.text_input("Nombre del Vendedor")
            
-            submitted_prov = st.form_submit_button("💾 Guardar Proveedor")
-           
-            if submitted_prov:
+            if st.form_submit_button("💾 Guardar Proveedor en Nube"):
                 if rut_proveedor and nombre_proveedor:
-                    nuevo_registro_prov = {
-                        "RUT": rut_proveedor,
-                        "Nombre": nombre_proveedor,
-                        "Teléfono": telefono_proveedor,
-                        "Correo": correo_proveedor,
-                        "Vendedor": nombre_vendedor
-                    }
-                   
-                    path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
-                   
                     try:
-                        df_proveedores = pd.read_excel(path_db, sheet_name="BD_Proveedores", dtype={'RUT': str})
-                    except Exception:
-                        df_proveedores = pd.DataFrame(columns=["RUT", "Nombre", "Teléfono", "Correo", "Vendedor"])
-                   
-                    if not df_proveedores.empty and rut_proveedor in df_proveedores['RUT'].values:
-                        st.error("⚠️ Ya existe un proveedor registrado con este RUT.")
-                    else:
-                        df_nuevo_p = pd.DataFrame([nuevo_registro_prov])
-                        df_proveedores = pd.concat([df_proveedores, df_nuevo_p], ignore_index=True)
-                       
-                        with pd.ExcelWriter(path_db, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-                            df_proveedores.to_excel(writer, sheet_name="BD_Proveedores", index=False)
-                       
+                        nuevo_prov = {
+                            "rut_empresa": str(rut_actual),
+                            "rut": str(rut_proveedor).strip(),
+                            "nombre": str(nombre_proveedor).strip(),
+                            "telefono": telefono_proveedor,
+                            "correo": correo_proveedor,
+                            "vendedor": nombre_vendedor
+                        }
+                        supabase.table("proveedores").insert(nuevo_prov).execute()
                         st.success(f"✅ Proveedor '{nombre_proveedor}' guardado exitosamente.")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar: {e}")
                 else:
-                    st.warning("⚠️ Los campos RUT y Nombre/Razón Social del proveedor son obligatorios.")
+                    st.warning("⚠️ RUT y Nombre del proveedor son obligatorios.")
 
-        st.markdown("#### 📋 Listado de Proveedores Registrados")
-        path_db = archivo_base if ('archivo_base' in globals() and archivo_base) else "base_datos.xlsx"
+        st.markdown("#### 📋 Listado de Proveedores")
         try:
-            df_ver_proveedores = pd.read_excel(path_db, sheet_name="BD_Proveedores", dtype={'RUT': str})
-            if not df_ver_proveedores.empty:
-                st.dataframe(df_ver_proveedores, use_container_width=True)
+            res_prov = supabase.table("proveedores").select("rut, nombre, telefono, correo, vendedor").eq("rut_empresa", rut_actual).execute()
+            df_prov = pd.DataFrame(res_prov.data)
+            if not df_prov.empty:
+                st.dataframe(df_prov, use_container_width=True, hide_index=True)
             else:
-                st.info("No hay proveedores registrados todavía.")
-        except Exception:
-            st.info("Aún no se ha creado la hoja 'BD_Proveedores' en el archivo Excel.")
+                st.info("No hay proveedores registrados en la nube todavía.")
+        except Exception as e:
+            st.error(f"Error conectando a proveedores (¿Asegúrate de haber creado la tabla 'proveedores' en Supabase?): {e}")
 
 # ----------------- SECCIÓN MERMAS Y AJUSTES DE INVENTARIO -----------------
 elif menu == "📉 Mermas y Ajustes":

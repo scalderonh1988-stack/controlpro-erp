@@ -563,26 +563,29 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if os.path.exists(archivo_cuadratura):
         df_cuadratura = pd.read_excel(archivo_cuadratura)
         if not df_cuadratura.empty:
-            # Blindaje contra columnas faltantes en registros antiguos
+            # Asegurar que todas las columnas clave existan para evitar errores
+            columnas_requeridas = ['ID', 'Fecha', 'Efectivo', 'Transferencia', 'Debito', 'Cigarros', 'Otros_Ingresos', 'VentaTotal', 'MarkupGeneral', 'MarkupCigarros', 'CostoReposicion', 'UtilidadRetirable', 'Observaciones']
             for col in columnas_requeridas:
                 if col not in df_cuadratura.columns:
-                    df_cuadratura[col] = ""
+                    df_cuadratura[col] = 0.0 if col in ['VentaTotal', 'UtilidadRetirable'] else ""
             
             if 'ID' not in df_cuadratura.columns or df_cuadratura['ID'].isna().all():
                 df_cuadratura['ID'] = [str(i) for i in range(len(df_cuadratura))]
             
+            # Mostrar tabla interactiva protegida
             for index, row in df_cuadratura.iterrows():
                 with st.container():
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 3, 1])
                     with col_h1:
-                        st.markdown(f"**Fecha:** {row['Fecha']}")
+                        fecha_txt = str(row['Fecha']) if pd.notna(row['Fecha']) else "S/F"
+                        st.markdown(f"**Fecha:** {fecha_txt}")
                     with col_h2:
-                        v_total = row['VentaTotal'] if pd.notna(row['VentaTotal']) else 0.0
+                        v_total = float(row['VentaTotal']) if pd.notna(row['VentaTotal']) else 0.0
                         st.markdown(f"**Total:** ${v_total:,.2f}")
-                        obs = row['Observaciones'] if pd.notna(row['Observaciones']) else "Sin obs"
+                        obs = str(row['Observaciones']) if pd.notna(row['Observaciones']) else "Sin obs"
                         st.caption(f"Obs: {obs}")
                     with col_h3:
-                        u_retirable = row['UtilidadRetirable'] if pd.notna(row['UtilidadRetirable']) else 0.0
+                        u_retirable = float(row['UtilidadRetirable']) if pd.notna(row['UtilidadRetirable']) else 0.0
                         st.markdown(f"**Utilidad:** ${u_retirable:,.2f}")
                     with col_h4:
                         row_id = str(row['ID']) if pd.notna(row['ID']) else str(index)

@@ -468,7 +468,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if not os.path.exists(archivo_cuadratura):
         pd.DataFrame(columns=columnas_requeridas).to_excel(archivo_cuadratura, index=False)
 
-    # Inputs directos sin contenedores flotantes
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
     
     st.markdown("#### 💰 Ingresos Generales de Caja")
@@ -525,7 +524,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
 
     if btn_guardar_cuat:
         if venta_total_calculada <= 0:
-            st.warning("⚠️ Debes ingresar al menos un monto en los ingresos de caja.")
+            st.toast("⚠️ Debes ingresar al menos un monto en los ingresos de caja.", icon="⚠️")
         else:
             df_cuat_ant = pd.read_excel(archivo_cuadratura)
             nuevo_id = str(pd.Timestamp.now().timestamp())
@@ -549,7 +548,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.success("✅ ¡Cuadratura guardada con éxito!")
             st.rerun()
 
-    # Sección de acumulados limpios
     st.markdown("---")
     st.markdown("### 📊 Acumulados y Reportes Progresivos")
     

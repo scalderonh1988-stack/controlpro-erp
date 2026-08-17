@@ -14,6 +14,7 @@ from fpdf import FPDF
 from PIL import Image
 from cuadratura import mostrar_modulo_cuadratura_diaria
 from historial_ventas import mostrar_modulo_historial_ventas
+from notas_credito import mostrar_modulo_notas_credito
 
 def cargar_maestro_proveedores(ruta_negocio):
     archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
@@ -1094,6 +1095,7 @@ if menu == "🏠 Home / Bienvenida":
         {"id": "dash", "nombre_ref": "Dashboard Ejecutivo", "label": "📊 Dashboard Ejecutivo"},
         {"id": "inv", "nombre_ref": "Inventario y Productos", "label": "📦 Inventario y Productos"},
         {"id": "pos", "nombre_ref": "Módulo de Ventas (POS)", "label": "💰 Módulo de Ventas (POS)"},
+        {"id": "nc", "nombre_ref": "Notas de Crédito", "label": "🔄 Notas de Crédito"},
         {"id": "comp", "nombre_ref": "Registrar Compra (CPP)", "label": "🛒 Registrar Compra (CPP)"},
         {"id": "mermas", "nombre_ref": "Mermas y Ajustes", "label": "📉 Mermas y Ajustes"},
         {"id": "inf", "nombre_ref": "Informes y Movimientos (Kardex)", "label": "📋 Informes y Movimientos"},
@@ -3206,3 +3208,6 @@ elif menu == "🔑 Control Maestro de Licencias":
                         st.error(f"❌ Error al actualizar en Supabase: {e}")
     else:
         st.warning("⚠️ No se encontraron registros de empresas en Supabase.")
+
+elif menu == "🔄 Notas de Crédito":
+    mostrar_modulo_notas_credito(ruta_negocio)

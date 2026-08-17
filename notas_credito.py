@@ -10,7 +10,7 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         st.rerun()
     st.markdown("---")
 
-    # --- 2. TÍTULOS (Ahora solo saldrá una vez) ---
+    # --- 2. TÍTULOS ---
     st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
     st.markdown("📌 **Gestión Rápida:** Anula ventas, devuelve stock al inventario y ajusta la cuadratura de caja de forma directa.")
 
@@ -44,10 +44,13 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         st.error("❌ No se encontró una columna de Folio/ID de transacción en el libro de ventas.")
         return
 
-    # --- NOVEDAD: CAPTURAR EL ÚLTIMO FOLIO PARA SUGERENCIA ---
-    ultimo_folio = "No disponible"
-    if not df_ventas[col_id].dropna().empty:
-        ultimo_folio = str(df_ventas[col_id].dropna().iloc[-1]) # Toma el último de la lista
+    # --- NOVEDAD: LISTA DESPLEGABLE ORDENADA DESDE EL MÁS RECIENTE ---
+    # Tomamos los folios, quitamos los vacíos y los convertimos a texto
+    lista_folios = df_ventas[col_id].dropna().astype(str).tolist()
+    # Invertimos la lista para que el último vendido quede de los primeros
+    lista_folios.reverse()
+    # Agregamos una opción por defecto para que no seleccione uno automáticamente
+    opciones_folios = ["Seleccione un folio..."] + lista_folios
 
     st.markdown("---")
     st.markdown("#### 🔍 1. Buscar Documento Original")
@@ -56,31 +59,33 @@ def mostrar_modulo_notas_credito(ruta_negocio):
     with col1:
         tipo_doc_busqueda = st.selectbox("Tipo de Documento:", ["Todos", "Boleta", "Factura"])
     with col2:
-        # Aquí agregamos la sugerencia del último folio
-        folio_busqueda = st.text_input(
-            "Ingrese el Número de Folio o ID:", 
-            placeholder=f"Ej: {ultimo_folio}",
-            help=f"💡 Sugerencia: El último documento generado en el POS fue el: {ultimo_folio}"
+        # Reemplazamos el input de texto por un selectbox (lista desplegable)
+        folio_busqueda = st.selectbox(
+            "Seleccione o escriba el Número de Folio:", 
+            options=opciones_folios,
+            help="💡 Los documentos están ordenados desde el más reciente al más antiguo. Haz clic y escribe para buscar más rápido."
         )
 
     # --- 4. BOTÓN DE BÚSQUEDA ---
     if st.button("🔍 Buscar Documento", type="primary"):
-        if not folio_busqueda:
-            st.warning("⚠️ Por favor, ingrese un número de folio para buscar.")
+        if folio_busqueda == "Seleccione un folio...":
+            st.warning("⚠️ Por favor, seleccione un número de folio de la lista para buscar.")
             if "venta_encontrada_nc" in st.session_state:
                 del st.session_state["venta_encontrada_nc"]
         else:
             df_filtrado = df_ventas.copy()
             df_filtrado[col_id] = df_filtrado[col_id].astype(str)
             folio_limpio = str(folio_busqueda).strip()
-            df_filtrado = df_filtrado[df_filtrado[col_id].str.contains(folio_limpio, case=False, na=False)]
+            
+            # Buscamos el match exacto del folio seleccionado
+            df_filtrado = df_filtrado[df_filtrado[col_id] == folio_limpio]
             
             if col_tipo and tipo_doc_busqueda != "Todos":
                 df_filtrado[col_tipo] = df_filtrado[col_tipo].astype(str)
                 df_filtrado = df_filtrado[df_filtrado[col_tipo].str.contains(tipo_doc_busqueda, case=False, na=False)]
 
             if df_filtrado.empty:
-                st.error(f"❌ No se encontró ningún documento con el folio '{folio_limpio}'.")
+                st.error(f"❌ No se encontró ningún documento con el folio '{folio_limpio}'. Verifica el tipo de documento.")
                 if "venta_encontrada_nc" in st.session_state:
                     del st.session_state["venta_encontrada_nc"]
             else:

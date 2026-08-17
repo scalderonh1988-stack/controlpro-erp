@@ -7,6 +7,7 @@ def mostrar_modulo_notas_credito(ruta_negocio):
     # --- 1. BOTÓN DE VOLVER AL HOME ---
     if st.button("🏠 Volver al Home", use_container_width=True):
         st.session_state["modulo_activo"] = "home"
+        st.session_state["menu_seleccionado"] = "🏠 Home / Bienvenida"  # <--- Conecta con la variable de tu app.py
         st.rerun()
     st.markdown("---")
 

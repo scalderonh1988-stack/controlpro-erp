@@ -4,6 +4,16 @@ from datetime import datetime
 import os
 
 def mostrar_modulo_notas_credito(ruta_negocio):
+    def mostrar_modulo_notas_credito(ruta_negocio):
+    # --- BOTÓN DE VOLVER AL HOME ---
+        if st.button("🏠 Volver al Home", use_container_width=True):
+            st.session_state["modulo_activo"] = "home"
+        st.rerun()
+    st.markdown("---")
+    # -------------------------------
+
+    st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
+    # ... (el resto de tu código sigue normal hacia abajo)
     st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
     st.markdown("📌 **Gestión Rápida:** Anula ventas, devuelve stock al inventario y ajusta la cuadratura de caja de forma directa.")
 

@@ -334,20 +334,24 @@ def mostrar_modulo_costos_fijos(rut_empresa, supabase):
     
     # 1. Formulario para agregar nuevo costo fijo o crédito
     with st.expander("➕ Registrar Nuevo Costo Fijo o Crédito"):
+        # El checkbox va FUERA del form para que sea interactivo al instante
+        es_credito = st.checkbox("¿Es un Crédito con cuotas definidas?")
+        
+        cuotas_totales = 1
+        cuota_actual = 1
+        if es_credito:
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                cuotas_totales = st.number_input("Cuotas Totales", min_value=1, step=1, value=12)
+            with col_c2:
+                cuota_actual = st.number_input("¿En qué cuota vamos?", min_value=1, step=1, value=1)
+
         with st.form("form_costo_fijo"):
             col1, col2 = st.columns(2)
             with col1:
                 nombre = st.text_input("Nombre del Gasto (Ej: Arriendo Local, Banco Estado)")
                 categoria = st.selectbox("Categoría", ["Arriendo", "Sueldos", "Crédito / Financiamiento", "Servicios Básicos", "Suscripciones", "Otros"])
                 monto = st.number_input("Monto Mensual ($)", min_value=0.0, step=1000.0)
-            
-            with col2:
-                es_credito = st.checkbox("¿Es un Crédito con cuotas definidas?")
-                cuotas_totales = 0
-                cuota_actual = 0
-                if es_credito:
-                    cuotas_totales = st.number_input("Cuotas Totales", min_value=1, step=1, value=12)
-                    cuota_actual = st.number_input("¿En qué cuota vamos?", min_value=1, step=1, value=1)
             
             submitted = st.form_submit_button("Guardar Costo Fijo")
             if submitted:

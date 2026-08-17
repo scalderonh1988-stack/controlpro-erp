@@ -893,6 +893,7 @@ modulos_totales = [
     "📒 Cuadratura Diaria",
     "📑 Cuentas por Cobrar",
     "📈 Reportes y Analítica",
+    "📚 Historial de Ventas",
     "🏦 Conciliación y Retiros Seguros",
     "⚙️ Configuración General"
 ]

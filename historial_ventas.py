@@ -6,14 +6,13 @@ import io
 
 def mostrar_modulo_historial_ventas(ruta_negocio):
     st.markdown("### 📚 Historial de Documentos y Ventas Emitidas")
-    st.markdown("📌 **Archivo General:** Explora el registro histórico con filtros avanzados por tipo de documento, cliente, fechas y estados.")
+    st.markdown("📌 **Archivo General:** Explora el registro histórico con filtros avanzados, tipos de documento y descarga de comprobantes individuales.")
 
-    # Detectar automáticamente el libro de ventas del mes actual (ej: Libro_Ventas_2026_08.xlsx)
+    # Detectar automáticamente el libro de ventas del mes actual
     mes_actual = datetime.now().strftime("%Y_%m")
     nombre_archivo = f"Libro_Ventas_{mes_actual}.xlsx"
     archivo_ventas = os.path.join(ruta_negocio, nombre_archivo)
 
-    # Si no existe el del mes actual, buscar respaldo en Ventas_Diarias.xlsx
     if not os.path.exists(archivo_ventas):
         archivo_ventas = os.path.join(ruta_negocio, "Ventas_Diarias.xlsx")
 
@@ -35,12 +34,13 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
     if 'Fecha' in df_ventas.columns:
         df_ventas['Fecha_dt'] = pd.to_datetime(df_ventas['Fecha'], errors='coerce')
 
-    # 📂 PESTAÑAS O CARPETAS DE NAVEGACIÓN
-    tab_gen, tab_doc, tab_cli, tab_pag = st.tabs([
+    # 📂 PESTAÑAS DE NAVEGACIÓN
+    tab_gen, tab_doc, tab_cli, tab_pag, tab_comprobante = st.tabs([
         "📂 Vista General", 
         "📄 Por Tipo de Documento", 
         "👤 Por Cliente", 
-        "💳 Estado de Pago"
+        "💳 Estado de Pago",
+        "🖨️ Descargar Comprobante / Factura"
     ])
 
     st.markdown("---")
@@ -73,7 +73,7 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
                 df_doc = df_doc[df_doc[col_doc] == doc_seleccionado]
             st.dataframe(df_doc.tail(limite_filas), use_container_width=True)
         else:
-            st.info("ℹ️ No se detectó una columna específica de 'Tipo de Documento'. Mostrando vista general.")
+            st.info("ℹ️ No se detectó una columna específica de 'Tipo de Documento'.")
             st.dataframe(df_filtrado.tail(limite_filas), use_container_width=True)
 
     with tab_cli:
@@ -106,7 +106,40 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
             st.info("ℹ️ No se detectó una columna específica de 'Estado de Pago'.")
             st.dataframe(df_filtrado.tail(limite_filas), use_container_width=True)
 
-    # Botón global de descarga corregido de manera segura en memoria
+    with tab_comprobante:
+        st.markdown("#### 🖨️ Búsqueda y Descarga de Comprobante Individual")
+        st.markdown("Ingresa o selecciona el ID de Transacción (ej. `TX_20260806172451`) para obtener el detalle exacto.")
+        
+        # Detectar columna de ID de transacción o folio
+        col_id = next((c for c in df_ventas.columns if 'transaccion' in c.lower() or 'folio' in c.lower() or 'id' in c.lower()), None)
+        
+        if col_id:
+            lista_ids = df_ventas[col_id].dropna().astype(str).tolist()
+            id_elegido = st.selectbox("Seleccione el ID de Transacción", options=lista_ids)
+            
+            if id_elegido:
+                # Filtrar la fila de esa venta específica
+                fila_venta = df_ventas[df_ventas[col_id].astype(str) == id_elegido]
+                
+                if not fila_venta.empty:
+                    st.success("✅ ¡Transacción encontrada con éxito!")
+                    st.dataframe(fila_venta, use_container_width=True)
+                    
+                    # Generar texto resumen tipo comprobante para descargar como archivo de texto/factura simple
+                    detalle_texto = "=== COMPROBANTE DE VENTA / FACTURA ===\n\n"
+                    for col in fila_venta.columns:
+                        detalle_texto += f"{col}: {fila_venta.iloc[0][col]}\n"
+                    
+                    st.download_button(
+                        label=f"📥 Descargar Comprobante ({id_elegido})",
+                        data=detalle_texto,
+                        file_name=f"Comprobante_{id_elegido}.txt",
+                        mime="text/plain"
+                    )
+        else:
+            st.warning("⚠️ No se encontró una columna de ID de Transacción o Folio en el archivo de ventas.")
+
+    # Botón global de descarga del reporte general
     st.divider()
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -114,7 +147,7 @@ def mostrar_modulo_historial_ventas(ruta_negocio):
     excel_data = output.getvalue()
 
     st.download_button(
-        label="📥 Descargar Reporte Filtrado en Excel",
+        label="📥 Descargar Reporte General Filtrado en Excel",
         data=excel_data,
         file_name="Historial_Documentos_Filtrado.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

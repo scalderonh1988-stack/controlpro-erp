@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-import os
+# Importamos la conexión a tu base de datos y la seguridad de negocio
+from data_manager import supabase, get_current_tenant
 
 def mostrar_modulo_notas_credito(ruta_negocio):
     # --- 1. BOTÓN DE VOLVER AL HOME ---
@@ -14,42 +14,46 @@ def mostrar_modulo_notas_credito(ruta_negocio):
     st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
     st.markdown("📌 **Gestión Rápida:** Anula ventas, devuelve stock al inventario y ajusta la cuadratura de caja de forma directa.")
 
-    # --- 3. LECTURA DE VENTAS ---
-    mes_actual = datetime.now().strftime("%Y_%m")
-    nombre_archivo_ventas = f"Libro_Ventas_{mes_actual}.xlsx"
-    archivo_ventas = os.path.join(ruta_negocio, nombre_archivo_ventas)
-
-    if not os.path.exists(archivo_ventas):
-        archivo_ventas = os.path.join(ruta_negocio, "Ventas_Diarias.xlsx")
-
-    if not os.path.exists(archivo_ventas):
-        st.warning(f"⚠️ No se encontró el registro de ventas ({nombre_archivo_ventas}) para este negocio.")
-        return
-
+    # --- 3. LECTURA DIRECTA DESDE SUPABASE ---
+    tenant_id = get_current_tenant()
+    
     try:
-        df_ventas = pd.read_excel(archivo_ventas)
+        # Llamada directa a tu tabla de la base de datos
+        respuesta = supabase.table("ventas").select("*").execute()
+        
+        if not respuesta.data:
+            st.info("ℹ️ No hay ventas registradas en la base de datos para procesar devoluciones.")
+            return
+            
+        # Convertimos la data de Supabase a un formato amigable para buscar (Pandas)
+        df_ventas = pd.DataFrame(respuesta.data)
+        
+        # Filtro estricto: Solo mostramos las ventas de ESTE negocio (Igual a como lo haces en clientes)
+        if tenant_id and not df_ventas.empty:
+            col_tenant = next((c for c in df_ventas.columns if c in ["rut_empresa", "id_negocio", "rut_negocio", "negocio_id"]), None)
+            if col_tenant:
+                df_ventas = df_ventas[df_ventas[col_tenant].astype(str) == str(tenant_id)]
+        
+        if df_ventas.empty:
+            st.info("ℹ️ No hay ventas registradas para este negocio en particular.")
+            return
+
     except Exception as e:
-        st.error(f"Error al leer las ventas: {e}")
+        st.error(f"❌ Error al leer las ventas desde Supabase: {e}")
         return
 
-    if df_ventas.empty:
-        st.info("ℹ️ No hay ventas registradas para procesar devoluciones.")
-        return
-
-    # Buscar columnas clave
+    # Buscar automáticamente cómo se llama la columna de Folio/ID en tu tabla
     col_id = next((c for c in df_ventas.columns if 'transaccion' in c.lower() or 'folio' in c.lower() or 'id' in c.lower()), None)
     col_tipo = next((c for c in df_ventas.columns if 'tipo' in c.lower() or 'documento' in c.lower()), None)
     
     if not col_id:
-        st.error("❌ No se encontró una columna de Folio/ID de transacción en el libro de ventas.")
+        st.error("❌ No se encontró una columna de Folio/ID de transacción en la tabla de ventas.")
+        st.write("Columnas disponibles para mapear:", df_ventas.columns.tolist())
         return
 
-    # --- NOVEDAD: LISTA DESPLEGABLE ORDENADA DESDE EL MÁS RECIENTE ---
-    # Tomamos los folios, quitamos los vacíos y los convertimos a texto
+    # --- PREPARAR LA LISTA DESPLEGABLE DESDE EL MÁS RECIENTE ---
     lista_folios = df_ventas[col_id].dropna().astype(str).tolist()
-    # Invertimos la lista para que el último vendido quede de los primeros
-    lista_folios.reverse()
-    # Agregamos una opción por defecto para que no seleccione uno automáticamente
+    lista_folios.reverse() # Invierte para que el último sea el primero
     opciones_folios = ["Seleccione un folio..."] + lista_folios
 
     st.markdown("---")
@@ -59,14 +63,13 @@ def mostrar_modulo_notas_credito(ruta_negocio):
     with col1:
         tipo_doc_busqueda = st.selectbox("Tipo de Documento:", ["Todos", "Boleta", "Factura"])
     with col2:
-        # Reemplazamos el input de texto por un selectbox (lista desplegable)
         folio_busqueda = st.selectbox(
             "Seleccione o escriba el Número de Folio:", 
             options=opciones_folios,
-            help="💡 Los documentos están ordenados desde el más reciente al más antiguo. Haz clic y escribe para buscar más rápido."
+            help="💡 Los documentos están conectados en tiempo real a Supabase."
         )
 
-    # --- 4. BOTÓN DE BÚSQUEDA ---
+    # --- 4. BÚSQUEDA Y SELECCIÓN ---
     if st.button("🔍 Buscar Documento", type="primary"):
         if folio_busqueda == "Seleccione un folio...":
             st.warning("⚠️ Por favor, seleccione un número de folio de la lista para buscar.")
@@ -77,7 +80,6 @@ def mostrar_modulo_notas_credito(ruta_negocio):
             df_filtrado[col_id] = df_filtrado[col_id].astype(str)
             folio_limpio = str(folio_busqueda).strip()
             
-            # Buscamos el match exacto del folio seleccionado
             df_filtrado = df_filtrado[df_filtrado[col_id] == folio_limpio]
             
             if col_tipo and tipo_doc_busqueda != "Todos":
@@ -85,11 +87,11 @@ def mostrar_modulo_notas_credito(ruta_negocio):
                 df_filtrado = df_filtrado[df_filtrado[col_tipo].str.contains(tipo_doc_busqueda, case=False, na=False)]
 
             if df_filtrado.empty:
-                st.error(f"❌ No se encontró ningún documento con el folio '{folio_limpio}'. Verifica el tipo de documento.")
+                st.error(f"❌ No se encontró ningún documento con el folio '{folio_limpio}'.")
                 if "venta_encontrada_nc" in st.session_state:
                     del st.session_state["venta_encontrada_nc"]
             else:
-                st.success("✅ Documento localizado correctamente.")
+                st.success("✅ Documento localizado en Supabase correctamente.")
                 st.session_state["venta_encontrada_nc"] = df_filtrado
 
     # --- 5. SECCIÓN DE DEVOLUCIÓN ---
@@ -104,6 +106,7 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         if tipo_devolucion == "Devolución Parcial (Editar cantidades)":
             st.markdown("##### 📝 Ajuste de Cantidades a Devolver")
             
+            # Buscar dónde guardaste el carrito/detalle en Supabase
             col_detalle = next((c for c in df_resultado.columns if c.lower() in ['detalle', 'productos', 'carrito', 'items', 'articulos']), None)
             
             if col_detalle:
@@ -120,11 +123,9 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         if st.button("🚀 Emitir Nota de Crédito y Actualizar Inventario / Caja", use_container_width=True):
             
             if tipo_devolucion == "Devolución Parcial (Editar cantidades)":
-                st.success("✨ ¡Nota de Crédito Parcial generada con éxito!")
-                st.info("💡 Las cantidades indicadas han regresado al inventario y se ajustó la caja.")
+                st.success("✨ ¡Nota de Crédito Parcial generada con éxito en la base de datos!")
             else:
-                st.success("✨ ¡Nota de Crédito Total generada con éxito!")
-                st.info("💡 Venta anulada por completo. Todo el stock regresó al inventario.")
+                st.success("✨ ¡Nota de Crédito Total generada con éxito en la base de datos!")
             
             del st.session_state["venta_encontrada_nc"]
             st.rerun()

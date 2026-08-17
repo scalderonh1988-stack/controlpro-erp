@@ -471,7 +471,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     # 1. Inputs de Carga Diaria con números limpios
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
     
-    st.divider()
     st.markdown("#### 💰 Ingresos Generales de Caja")
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
@@ -487,8 +486,6 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     with col_f5:
         markup_general = st.number_input("📈 Markup Productos Generales (%)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 
-    st.divider()
-    
     aplicar_cigarros = st.toggle("🚬 ¿Aplicar control diferenciado para Cigarrillos / Exentos en este cierre?", value=True)
     
     cigarrillos_c = 0.0

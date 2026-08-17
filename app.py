@@ -468,7 +468,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
     if not os.path.exists(archivo_cuadratura):
         pd.DataFrame(columns=columnas_requeridas).to_excel(archivo_cuadratura, index=False)
 
-    # 1. Inputs de Carga Diaria con números limpios
+    # Inputs directos sin contenedores flotantes
     fecha_cuat = st.date_input("Fecha de Cuadratura", value=date.today())
     
     st.markdown("#### 💰 Ingresos Generales de Caja")
@@ -549,7 +549,7 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             st.success("✅ ¡Cuadratura guardada con éxito!")
             st.rerun()
 
-    # 2. SECCIÓN DE ACUMULADOS Y REPORTES PROGRESIVOS DIRECTOS
+    # Sección de acumulados limpios
     st.markdown("---")
     st.markdown("### 📊 Acumulados y Reportes Progresivos")
     
@@ -605,27 +605,26 @@ def mostrar_modulo_cuadratura_diaria(ruta_negocio):
             with tab_p5:
                 st.markdown("#### Historial y Gestión de Registros")
                 for index, row in df_cuadratura.iterrows():
-                    with st.container():
-                        col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 3, 1])
-                        with col_h1:
-                            fecha_txt = str(row['Fecha']) if pd.notna(row['Fecha']) else "S/F"
-                            st.markdown(f"**Fecha:** {fecha_txt}")
-                        with col_h2:
-                            v_total = float(row['VentaTotal']) if pd.notna(row['VentaTotal']) else 0.0
-                            st.markdown(f"**Total:** ${v_total:,.2f}")
-                            obs = str(row['Observaciones']) if pd.notna(row['Observaciones']) else "Sin obs"
-                            st.caption(f"Obs: {obs}")
-                        with col_h3:
-                            u_retirable = float(row['UtilidadRetirable']) if pd.notna(row['UtilidadRetirable']) else 0.0
-                            st.markdown(f"**Utilidad:** ${u_retirable:,.2f}")
-                        with col_h4:
-                            row_id = str(row['ID']) if pd.notna(row['ID']) else str(index)
-                            if st.button("🗑️", key=f"del_cuat_{row_id}_{index}"):
-                                df_filtrado = df_cuadratura.drop(index)
-                                df_filtrado.drop(columns=['Fecha_dt'], errors='ignore').to_excel(archivo_cuadratura, index=False)
-                                st.success("🗑️ ¡Registro eliminado con éxito!")
-                                st.rerun()
-                        st.divider()
+                    col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 3, 1])
+                    with col_h1:
+                        fecha_txt = str(row['Fecha']) if pd.notna(row['Fecha']) else "S/F"
+                        st.markdown(f"**Fecha:** {fecha_txt}")
+                    with col_h2:
+                        v_total = float(row['VentaTotal']) if pd.notna(row['VentaTotal']) else 0.0
+                        st.markdown(f"**Total:** ${v_total:,.2f}")
+                        obs = str(row['Observaciones']) if pd.notna(row['Observaciones']) else "Sin obs"
+                        st.caption(f"Obs: {obs}")
+                    with col_h3:
+                        u_retirable = float(row['UtilidadRetirable']) if pd.notna(row['UtilidadRetirable']) else 0.0
+                        st.markdown(f"**Utilidad:** ${u_retirable:,.2f}")
+                    with col_h4:
+                        row_id = str(row['ID']) if pd.notna(row['ID']) else str(index)
+                        if st.button("🗑️", key=f"del_cuat_{row_id}_{index}"):
+                            df_filtrado = df_cuadratura.drop(index)
+                            df_filtrado.drop(columns=['Fecha_dt'], errors='ignore').to_excel(archivo_cuadratura, index=False)
+                            st.success("🗑️ ¡Registro eliminado con éxito!")
+                            st.rerun()
+                    st.divider()
         else:
             st.info("ℹ️ No hay registros guardados todavía.")
 

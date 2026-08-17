@@ -1,21 +1,19 @@
 import streamlit as st
 import pandas as pd
-import os
-from datetime import datetime, date
+from datetime import date
+# Importamos la conexión a tu base de datos y la seguridad de negocio
+from data_manager import supabase, get_current_tenant
 
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
-    st.markdown("Administra y registra las facturas pendientes de tus proveedores. Cambia el estado a 'Pagado' cuando saldes la deuda.")
-    st.error("🚨 ESTOY LEYENDO EL ARCHIVO NUEVO")
+    st.markdown("Administra y registra las facturas pendientes de tus proveedores. Cambia el estado a 'Pagado' cuando saldes la deuda (100% Nube).")
 
-    archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
+    tenant_id = get_current_tenant()
+    if not tenant_id:
+        st.error("❌ No se ha identificado el negocio. Por favor, inicia sesión nuevamente.")
+        return
 
-    if not os.path.exists(archivo_cuentas):
-        df_ini = pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado'])
-        df_ini.to_excel(archivo_cuentas, index=False)
-
-    df_cuentas = pd.read_excel(archivo_cuentas)
-
+    # --- 1. FORMULARIO PARA NUEVA FACTURA ---
     with st.expander("➕ Registrar Nueva Factura de Proveedor Manualmente"):
         with st.form("form_nueva_cuenta_manual"):
             col_c1, col_c2 = st.columns(2)
@@ -28,36 +26,48 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
                 f_venc = st.date_input("Fecha de Vencimiento", value=date.today())
            
             btn_guardar_cuenta = st.form_submit_button("💾 Guardar Factura Pendiente")
+            
             if btn_guardar_cuenta:
                 if not prov_m or not num_fac_m or monto_m <= 0:
                     st.warning("⚠️ Completa todos los campos obligatorios y un monto mayor a 0.")
                 else:
-                    nueva_fila = pd.DataFrame([{
-                        'Proveedor': prov_m,
-                        'Numero_Factura': num_fac_m,
-                        'Fecha_Emision': str(f_emision),
-                        'Fecha_Vencimiento': str(f_venc),
-                        'Monto_Total': monto_m,
-                        'Estado': 'PENDIENTE'
-                    }])
-                    df_actualizado = pd.concat([df_cuentas, nueva_fila], ignore_index=True)
-                    df_actualizado.to_excel(archivo_cuentas, index=False)
-                    st.success("✅ ¡Factura registrada correctamente en Cuentas por Pagar!")
-                    st.rerun()
+                    try:
+                        nueva_fila = {
+                            'rut_empresa': str(tenant_id),
+                            'proveedor': prov_m,
+                            'numero_factura': num_fac_m,
+                            'fecha_emision': str(f_emision),
+                            'fecha_vencimiento': str(f_venc),
+                            'monto_total': float(monto_m),
+                            'estado': 'PENDIENTE'
+                        }
+                        # Insertar directo a Supabase
+                        supabase.table("cuentas_por_pagar").insert(nueva_fila).execute()
+                        st.success("✅ ¡Factura registrada correctamente en la nube!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar en la base de datos: {e}")
 
     st.divider()
 
-    df_cuentas = pd.read_excel(archivo_cuentas)
+    # --- 2. LECTURA DESDE SUPABASE ---
+    try:
+        res = supabase.table("cuentas_por_pagar").select("*").eq("rut_empresa", str(tenant_id)).execute()
+        df_cuentas = pd.DataFrame(res.data)
+    except Exception as e:
+        st.error(f"❌ Error al conectar con Supabase: {e}")
+        df_cuentas = pd.DataFrame()
 
     if df_cuentas.empty:
-        st.info("ℹ️ No hay cuentas por pagar registradas.")
+        st.info("ℹ️ No hay cuentas por pagar registradas para este local.")
     else:
-        df_pendientes = df_cuentas[df_cuentas['Estado'].astype(str).str.upper() == 'PENDIENTE']
-        deuda_total_pendiente = df_pendientes['Monto_Total'].sum() if not df_pendientes.empty else 0.0
+        # Filtramos las pendientes para sumar la deuda
+        df_pendientes = df_cuentas[df_cuentas['estado'].astype(str).str.upper() == 'PENDIENTE']
+        deuda_total_pendiente = df_pendientes['monto_total'].sum() if not df_pendientes.empty else 0.0
 
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            st.metric(label="🔥 Deuda Total Pendiente", value=f"${deuda_total_pendiente:,.2f}")
+            st.metric(label="🔥 Deuda Total Pendiente", value=f"${deuda_total_pendiente:,.0f}")
         with col_m2:
             st.metric(label="📄 Total Documentos Registrados", value=len(df_cuentas))
 
@@ -66,19 +76,22 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
         st.markdown("Utiliza el botón **'✅ Marcar Pagado'** al lado de cada documento para actualizar su estado de inmediato.")
 
         for idx, row in df_cuentas.iterrows():
-            estado_actual = str(row.get('Estado', 'PENDIENTE')).upper()
+            estado_actual = str(row.get('estado', 'PENDIENTE')).upper()
             es_pendiente = estado_actual == 'PENDIENTE'
 
             c_info, c_action = st.columns([8, 2])
             with c_info:
-                st.info(f"🏢 **{row.get('Proveedor', '')}** | Fac: **{row.get('Numero_Factura', '')}** | Emisión: {row.get('Fecha_Emision', '')} | Vence: **{row.get('Fecha_Vencimiento', '')}** | Monto: **${float(row.get('Monto_Total', 0)):,.2f}** | Estado: **{estado_actual}**")
+                st.info(f"🏢 **{row.get('proveedor', '')}** | Fac: **{row.get('numero_factura', '')}** | Emisión: {row.get('fecha_emision', '')} | Vence: **{row.get('fecha_vencimiento', '')}** | Monto: **${float(row.get('monto_total', 0)):,.0f}** | Estado: **{estado_actual}**")
            
             with c_action:
                 if es_pendiente:
-                    if st.button("✅ Marcar Pagado", key=f"pagar_cta_{idx}", type="primary"):
-                        df_cuentas.at[idx, 'Estado'] = 'PAGADO'
-                        df_cuentas.to_excel(archivo_cuentas, index=False)
-                        st.success(f"🎉 ¡Factura {row.get('Numero_Factura', '')} marcada como Pagada!")
-                        st.rerun()
+                    if st.button("✅ Marcar Pagado", key=f"pagar_cta_{idx}_{row.get('numero_factura')}", type="primary"):
+                        try:
+                            # Actualizamos el estado a PAGADO en Supabase usando el proveedor y la factura como llave
+                            supabase.table("cuentas_por_pagar").update({"estado": "PAGADO"}).eq("rut_empresa", str(tenant_id)).eq("proveedor", row.get('proveedor')).eq("numero_factura", row.get('numero_factura')).execute()
+                            st.success(f"🎉 ¡Factura {row.get('numero_factura', '')} marcada como Pagada!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar el pago: {e}")
                 else:
                     st.success("✔ Pagado")

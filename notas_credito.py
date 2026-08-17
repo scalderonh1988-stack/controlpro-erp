@@ -4,20 +4,17 @@ from datetime import datetime
 import os
 
 def mostrar_modulo_notas_credito(ruta_negocio):
-    def mostrar_modulo_notas_credito(ruta_negocio):
-    # --- BOTÓN DE VOLVER AL HOME ---
-        if st.button("🏠 Volver al Home", use_container_width=True):
-            st.session_state["modulo_activo"] = "home"
+    # --- 1. BOTÓN DE VOLVER AL HOME ---
+    if st.button("🏠 Volver al Home", use_container_width=True):
+        st.session_state["modulo_activo"] = "home"
         st.rerun()
     st.markdown("---")
-    # -------------------------------
 
-    st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
-    # ... (el resto de tu código sigue normal hacia abajo)
+    # --- 2. TÍTULOS (Ahora solo saldrá una vez) ---
     st.markdown("### 🔄 Emisión de Notas de Crédito y Devoluciones")
     st.markdown("📌 **Gestión Rápida:** Anula ventas, devuelve stock al inventario y ajusta la cuadratura de caja de forma directa.")
 
-    # 1. Buscar archivo de ventas del mes actual
+    # --- 3. LECTURA DE VENTAS ---
     mes_actual = datetime.now().strftime("%Y_%m")
     nombre_archivo_ventas = f"Libro_Ventas_{mes_actual}.xlsx"
     archivo_ventas = os.path.join(ruta_negocio, nombre_archivo_ventas)
@@ -39,13 +36,18 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         st.info("ℹ️ No hay ventas registradas para procesar devoluciones.")
         return
 
-    # Buscar columnas clave inteligentemente
+    # Buscar columnas clave
     col_id = next((c for c in df_ventas.columns if 'transaccion' in c.lower() or 'folio' in c.lower() or 'id' in c.lower()), None)
     col_tipo = next((c for c in df_ventas.columns if 'tipo' in c.lower() or 'documento' in c.lower()), None)
     
     if not col_id:
         st.error("❌ No se encontró una columna de Folio/ID de transacción en el libro de ventas.")
         return
+
+    # --- NOVEDAD: CAPTURAR EL ÚLTIMO FOLIO PARA SUGERENCIA ---
+    ultimo_folio = "No disponible"
+    if not df_ventas[col_id].dropna().empty:
+        ultimo_folio = str(df_ventas[col_id].dropna().iloc[-1]) # Toma el último de la lista
 
     st.markdown("---")
     st.markdown("#### 🔍 1. Buscar Documento Original")
@@ -54,8 +56,14 @@ def mostrar_modulo_notas_credito(ruta_negocio):
     with col1:
         tipo_doc_busqueda = st.selectbox("Tipo de Documento:", ["Todos", "Boleta", "Factura"])
     with col2:
-        folio_busqueda = st.text_input("Ingrese el Número de Folio o ID:")
+        # Aquí agregamos la sugerencia del último folio
+        folio_busqueda = st.text_input(
+            "Ingrese el Número de Folio o ID:", 
+            placeholder=f"Ej: {ultimo_folio}",
+            help=f"💡 Sugerencia: El último documento generado en el POS fue el: {ultimo_folio}"
+        )
 
+    # --- 4. BOTÓN DE BÚSQUEDA ---
     if st.button("🔍 Buscar Documento", type="primary"):
         if not folio_busqueda:
             st.warning("⚠️ Por favor, ingrese un número de folio para buscar.")
@@ -79,7 +87,7 @@ def mostrar_modulo_notas_credito(ruta_negocio):
                 st.success("✅ Documento localizado correctamente.")
                 st.session_state["venta_encontrada_nc"] = df_filtrado
 
-    # Mostrar sección de devolución SOLO si hay una venta guardada
+    # --- 5. SECCIÓN DE DEVOLUCIÓN ---
     if "venta_encontrada_nc" in st.session_state and st.session_state["venta_encontrada_nc"] is not None:
         df_resultado = st.session_state["venta_encontrada_nc"]
         st.dataframe(df_resultado, use_container_width=True)
@@ -87,11 +95,10 @@ def mostrar_modulo_notas_credito(ruta_negocio):
         st.markdown("#### 📦 2. Tipo de Devolución")
         tipo_devolucion = st.radio("Seleccione el alcance de la Nota de Crédito:", ["Devolución Total (Anulación de Venta)", "Devolución Parcial (Editar cantidades)"])
 
-        # ----- MAGIA PARA DEVOLUCIÓN PARCIAL -----
+        # DEVOLUCIÓN PARCIAL
         if tipo_devolucion == "Devolución Parcial (Editar cantidades)":
             st.markdown("##### 📝 Ajuste de Cantidades a Devolver")
             
-            # Buscar la columna donde se guardan los productos (Detalle, Productos, etc.)
             col_detalle = next((c for c in df_resultado.columns if c.lower() in ['detalle', 'productos', 'carrito', 'items', 'articulos']), None)
             
             if col_detalle:
@@ -101,13 +108,10 @@ def mostrar_modulo_notas_credito(ruta_negocio):
             else:
                 st.write("Ingresa los productos y las cantidades exactas a devolver:")
 
-            # Crear tabla editable vacía para llenarla
             tabla_parcial = pd.DataFrame([{"Producto": "", "Cantidad a Devolver": 0}])
-            
-            # st.data_editor permite editar celdas y agregar filas dinámicamente
             datos_parciales = st.data_editor(tabla_parcial, num_rows="dynamic", use_container_width=True)
-        # -----------------------------------------
 
+        # BOTÓN FINAL DE CONFIRMACIÓN
         if st.button("🚀 Emitir Nota de Crédito y Actualizar Inventario / Caja", use_container_width=True):
             
             if tipo_devolucion == "Devolución Parcial (Editar cantidades)":

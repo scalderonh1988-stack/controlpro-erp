@@ -329,6 +329,84 @@ def mostrar_modulo_registro_gastos(supabase):
                     except Exception as e:
                         st.error("Error al eliminar el registro.")
 
+def mostrar_modulo_costos_fijos(rut_empresa, supabase):
+    st.subheader("🏢 Gestión de Costos Fijos y Créditos Mensuales")
+    
+    # 1. Formulario para agregar nuevo costo fijo o crédito
+    with st.expander("➕ Registrar Nuevo Costo Fijo o Crédito"):
+        with st.form("form_costo_fijo"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nombre = st.text_input("Nombre del Gasto (Ej: Arriendo Local, Banco Estado)")
+                categoria = st.selectbox("Categoría", ["Arriendo", "Sueldos", "Crédito / Financiamiento", "Servicios Básicos", "Suscripciones", "Otros"])
+                monto = st.number_input("Monto Mensual ($)", min_value=0.0, step=1000.0)
+            
+            with col2:
+                es_credito = st.checkbox("¿Es un Crédito con cuotas definidas?")
+                cuotas_totales = 0
+                cuota_actual = 0
+                if es_credito:
+                    cuotas_totales = st.number_input("Cuotas Totales", min_value=1, step=1, value=12)
+                    cuota_actual = st.number_input("¿En qué cuota vamos?", min_value=1, step=1, value=1)
+            
+            submitted = st.form_submit_button("Guardar Costo Fijo")
+            if submitted:
+                if nombre and monto > 0:
+                    nuevo_costo = {
+                        "rut_empresa": rut_empresa,
+                        "nombre": nombre,
+                        "categoria": categoria,
+                        "monto": monto,
+                        "es_credito": es_credito,
+                        "cuotas_totales": int(cuotas_totales) if es_credito else 0,
+                        "cuota_actual": int(cuota_actual) if es_credito else 0,
+                        "activo": True
+                    }
+                    supabase.table("costos_fijos").insert(nuevo_costo).execute()
+                    st.success("¡Costo fijo registrado con éxito!")
+                    st.rerun()
+                else:
+                    st.warning("Completa el nombre y un monto válido.")
+
+    # 2. Cargar y mostrar los costos fijos actuales
+    response = supabase.table("costos_fijos").select("*").eq("rut_empresa", rut_empresa).eq("activo", True).execute()
+    data = response.data
+
+    if data:
+        df_costos = pd.DataFrame(data)
+        
+        # Métrica resumen del total mensual
+        total_fijo = df_costos["monto"].sum()
+        st.metric(label="Total Costos Fijos Mensuales", value=f"${total_fijo:,.0f}")
+        
+        st.markdown("---")
+        st.markdown("### 📋 Listado de Compromisos Mensuales")
+        
+        # Formatear visualización para créditos
+        for index, row in df_costos.iterrows():
+            with st.container():
+                col_a, col_b, col_c, col_d = st.columns([3, 2, 2, 1])
+                with col_a:
+                    st.markdown(f"**{row['nombre']}**")
+                    st.caption(f"Categoría: {row['categoria']}")
+                with col_b:
+                    st.markdown(f"**Monto:** ${row['monto']:,.0f}")
+                with col_c:
+                    if row['es_credito']:
+                        st.markdown(f"💳 **Crédito:** Cuota {row['cuota_actual']} de {row['cuotas_totales']}")
+                        # Barra de progreso visual para el crédito
+                        progreso = float(row['cuota_actual']) / float(row['cuotas_totales']) if row['cuotas_totales'] > 0 else 0
+                        st.progress(min(progreso, 1.0))
+                    else:
+                        st.markdown("🔄 *Gasto Fijo Recurrente*")
+                with col_d:
+                    if st.button("🗑️", key=f"del_cf_{row['id']}"):
+                        supabase.table("costos_fijos").update({"activo": False}).eq("id", row['id']).execute()
+                        st.rerun()
+                st.divider()
+    else:
+        st.info("No hay costos fijos registrados todavía. Agrega el primero usando el formulario de arriba.")
+
 def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
     st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
     archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")

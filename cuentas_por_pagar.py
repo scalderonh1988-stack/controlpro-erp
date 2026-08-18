@@ -13,7 +13,7 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
         st.error("❌ No se ha identificado el negocio. Por favor, inicia sesión nuevamente.")
         return
 
-    # --- 1. FORMULARIO PARA NUEVA FACTURA ---
+    # --- 1. FORMULARIO PARA NUEVA FACTURA MANUAL ---
     with st.expander("➕ Registrar Nueva Factura de Proveedor Manualmente"):
         with st.form("form_nueva_cuenta_manual"):
             col_c1, col_c2 = st.columns(2)
@@ -41,7 +41,6 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
                             'monto_total': float(monto_m),
                             'estado': 'PENDIENTE'
                         }
-                        # Insertar directo a Supabase
                         supabase.table("cuentas_por_pagar").insert(nueva_fila).execute()
                         st.success("✅ ¡Factura registrada correctamente en la nube!")
                         st.rerun()
@@ -50,7 +49,7 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
 
     st.divider()
 
-    # --- 2. LECTURA DESDE SUPABASE ---
+    # --- 2. LECTURA DIRECTA DESDE SUPABASE ---
     try:
         res = supabase.table("cuentas_por_pagar").select("*").eq("rut_empresa", str(tenant_id)).execute()
         df_cuentas = pd.DataFrame(res.data)
@@ -87,8 +86,8 @@ def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
                 if es_pendiente:
                     if st.button("✅ Marcar Pagado", key=f"pagar_cta_{idx}_{row.get('numero_factura')}", type="primary"):
                         try:
-                            # Actualizamos el estado a PAGADO en Supabase usando el proveedor y la factura como llave
-                            supabase.table("cuentas_por_pagar").update({"estado": "PAGADO"}).eq("rut_empresa", str(tenant_id)).eq("proveedor", row.get('proveedor')).eq("numero_factura", row.get('numero_factura')).execute()
+                            # Actualizamos el estado a PAGADO en Supabase
+                            supabase.table("cuentas_por_pagar").update({"estado": "PAGADO"}).eq("rut_empresa", str(tenant_id)).eq("id", row.get('id')).execute()
                             st.success(f"🎉 ¡Factura {row.get('numero_factura', '')} marcada como Pagada!")
                             st.rerun()
                         except Exception as e:

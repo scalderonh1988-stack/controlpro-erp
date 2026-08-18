@@ -101,28 +101,33 @@ def mostrar_modulo_ventas(ruta_negocio):
                         "rut_empresa": str(tenant_id),
                         "fecha": fecha_hoy,
                         "detalle": f"{item['descripcion']} (Cant: {item['cantidad']})",
-                        "monto": item["subtotal"],
+                        "monto": float(item["subtotal"]), # Aseguramos que sea formato numérico
                         "metodo_pago": metodo_pago,
                         "documento": tipo_doc
                     })
 
                 try:
-                    # 1. Insertamos TODA la venta en la tabla 'ventas' de una sola vez
-                    supabase.table("ventas").insert(registros_para_nube).execute()
+                    # 1. Insertamos y GUARDAMOS la respuesta de Supabase para validarla
+                    respuesta_venta = supabase.table("ventas").insert(registros_para_nube).execute()
 
-                    # 2. Descontamos el stock en la tabla 'productos'
-                    for item in st.session_state["carrito_pos"]:
-                        nuevo_stock = item["stock_actual"] - item["cantidad"]
-                        supabase.table("productos").update({"stock": float(nuevo_stock)}).eq("rut_empresa", str(tenant_id)).eq("codigo", item["codigo"]).execute()
-                    
-                    st.success(f"🎉 ¡Venta cobrada con éxito! (Folio: {folio_venta})")
-                    st.info("📁 Los datos ya están seguros en Supabase.")
-                    
-                    # Limpiamos la pantalla para el siguiente cliente
-                    st.session_state["carrito_pos"] = []
-                    st.rerun()
-                    
+                    # Validamos explícitamente si Supabase devolvió datos confirmando el guardado
+                    if not respuesta_venta.data:
+                        st.error("❌ OJO: Supabase recibió la orden pero NO guardó los datos. Verifica que las columnas (folio, rut_empresa, fecha, detalle, monto, metodo_pago, documento) existan en tu tabla 'ventas' y estén bien escritas.")
+                    else:
+                        # 2. Descontamos el stock SOLO si la venta realmente se guardó
+                        for item in st.session_state["carrito_pos"]:
+                            nuevo_stock = item["stock_actual"] - item["cantidad"]
+                            supabase.table("productos").update({"stock": float(nuevo_stock)}).eq("rut_empresa", str(tenant_id)).eq("codigo", item["codigo"]).execute()
+                        
+                        st.success(f"🎉 ¡Venta cobrada con éxito! (Folio: {folio_venta})")
+                        st.info("📁 Los datos ya están seguros en Supabase.")
+                        
+                        # Limpiamos la pantalla para el siguiente cliente
+                        st.session_state["carrito_pos"] = []
+                        st.rerun()
+                        
                 except Exception as e:
-                    st.error(f"❌ Error al enviar la venta a la nube: {e}")
+                    # Si falla por tipo de datos o error de conexión, frenará aquí y mostrará el problema real
+                    st.error(f"❌ Error devuelto por la base de datos: {e}")
     else:
         st.info("👉 El carrito está vacío. Ingresa un código de producto para comenzar a cobrar.")

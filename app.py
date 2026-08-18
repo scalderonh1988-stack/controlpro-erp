@@ -15,6 +15,7 @@ from PIL import Image
 from cuadratura import mostrar_modulo_cuadratura_diaria
 from historial_ventas import mostrar_modulo_historial_ventas
 from notas_credito import mostrar_modulo_notas_credito
+from cuentas_por_pagar import mostrar_modulo_cuentas_por_pagar
 
 def cargar_maestro_proveedores(ruta_negocio):
     archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
@@ -413,44 +414,6 @@ def mostrar_modulo_costos_fijos(rut_empresa, supabase):
                 st.divider()
     else:
         st.info("No hay costos fijos registrados todavía. Agrega el primero usando el formulario de arriba.")
-
-def mostrar_modulo_cuentas_por_pagar(ruta_negocio):
-    st.markdown("### 💳 Módulo de Cuentas por Pagar y Proveedores")
-    archivo_cuentas = os.path.join(ruta_negocio, "Cuentas_Por_Pagar.xlsx")
-   
-    if not os.path.exists(archivo_cuentas):
-        pd.DataFrame(columns=['Proveedor', 'Numero_Factura', 'Fecha_Emision', 'Fecha_Vencimiento', 'Monto_Total', 'Estado']).to_excel(archivo_cuentas, index=False)
-   
-    df_cuentas = pd.read_excel(archivo_cuentas)
-   
-    for col_f in ['Fecha_Emision', 'Fecha_Vencimiento']:
-        if col_f in df_cuentas.columns:
-            df_cuentas[col_f] = pd.to_datetime(df_cuentas[col_f], errors='coerce').dt.date
-   
-    st.dataframe(df_cuentas, use_container_width=True)
-   
-    st.divider()
-    st.markdown("### ⚙️ Actualizar Estado de Documento")
-   
-    if not df_cuentas.empty:
-        opciones_facturas = []
-        for idx, row in df_cuentas.iterrows():
-            opciones_facturas.append(f"Fila {idx} - Prov: {row.get('Proveedor')} | Factura #{row.get('Numero_Factura')} | Estado: {row.get('Estado')}")
-       
-        with st.form("form_actualizar_estado_cxp"):
-            factura_seleccionada = st.selectbox("Selecciona la factura a modificar:", options=opciones_facturas)
-            nuevo_estado = st.selectbox("Nuevo Estado:", options=["PAGADO", "PENDIENTE"])
-           
-            btn_actualizar_estado = st.form_submit_button("🔄 Actualizar Estado de Factura", type="primary")
-           
-            if btn_actualizar_estado and factura_seleccionada:
-                idx_fila = int(factura_seleccionada.split(" - ")[0].replace("Fila ", ""))
-                df_cuentas.loc[idx_fila, "Estado"] = nuevo_estado
-                df_cuentas.to_excel(archivo_cuentas, index=False)
-                st.success(f"✅ ¡El estado de la factura se ha actualizado a **{nuevo_estado}** con éxito!")
-                st.rerun()
-    else:
-        st.info("ℹ️ No hay registros en Cuentas por Pagar para modificar.")        
 
 
 def mostrar_modulo_conciliacion_retiros(ruta_negocio):

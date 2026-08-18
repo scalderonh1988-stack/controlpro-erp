@@ -2809,6 +2809,8 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         transaccion_id_actual = f"TX_{fecha_hora_actual.strftime('%Y%m%d%H%M%S')}"
                         lineas_productos = ""
                         
+                        venta_exitosa = True
+                        
                         # --- ☁️ SINCRONIZACIÓN CON SUPABASE: DESCUENTO DE STOCK Y REGISTRO DE VENTA ---
                         for item in st.session_state.carrito_ventas:
                             lineas_productos += f"- {item['Descripción']} (x{int(item['Cantidad'])}) ... ${item['Subtotal']:,.2f}\n"
@@ -2843,11 +2845,17 @@ elif menu == "💰 Módulo de Ventas (POS)":
                             try:
                                 res_venta = supabase.table("ventas").insert(registro_linea).execute()
                                 if not res_venta.data:
-                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}. Revisa los nombres de las columnas.")
+                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}. Verifica la estructura de la tabla 'ventas'.")
+                                    venta_exitosa = False
                             except Exception as e:
                                 st.error(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")
+                                venta_exitosa = False
 
-                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE ---
+                        # 🛑 SI OCURRIÓ UN ERROR, FRENAMOS LA EJECUCIÓN PARA VER LA ALERTA ROJA
+                        if not venta_exitosa:
+                            st.stop()
+
+                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE (Solo se ejecuta si la venta fue exitosa) ---
                         cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
                        
                         st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
@@ -2870,18 +2878,6 @@ PAGO: {forma_pago.upper()}
 ========================================
 {cfg.get('pie_pagina', 'Gracias por su preferencia')}
 ========================================"""
-                        
-                        try:
-                            carpeta_tipo = tipo_documento.lower().replace(" ", "_").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
-                            dir_archivador = os.path.join(ruta_negocio, "archivador_ventas", carpeta_tipo)
-                            os.makedirs(dir_archivador, exist_ok=True)
-                            
-                            ruta_completa_doc = os.path.join(dir_archivador, f"{transaccion_id_actual}.txt")
-                            
-                            with open(ruta_completa_doc, "w", encoding="utf-8") as f_doc:
-                                f_doc.write(texto_recibo)
-                        except Exception as e:
-                            print(f"Error al guardar en el archivador: {e}")
 
                         st.session_state.ultimo_recibo = texto_recibo
                         st.session_state.estado_pago = False

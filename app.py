@@ -2825,16 +2825,16 @@ elif menu == "💰 Módulo de Ventas (POS)":
                             except Exception as e:
                                 st.warning(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
 
-                            # 2. Preparar línea de venta con las llaves ORIGINALES de tu tabla
+                            # 2. Preparar línea de venta con las llaves que SÍ funcionaron
                             registro_linea = {
-                                "transaccion_id": transaccion_id_actual,
+                                "folio": transaccion_id_actual,
                                 "rut_empresa": rut_actual,
-                                "fecha_hora": fecha_hora_actual.strftime("%Y-%m-%d %H:%M:%S"),
+                                "fecha": fecha_hora_actual.strftime("%Y-%m-%d %H:%M:%S"),
                                 "caja": caja_actual, 
                                 "documento": tipo_documento,
                                 "detalle": f"{item['Descripción']} (x{int(item['Cantidad'])})",
-                                "subtotal": float(item["Subtotal"]), 
-                                "forma_pago": forma_pago
+                                "monto": float(item["Subtotal"]), 
+                                "metodo_pago": forma_pago
                             }
                             
                             try:

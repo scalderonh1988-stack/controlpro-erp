@@ -2825,22 +2825,22 @@ elif menu == "💰 Módulo de Ventas (POS)":
                             except Exception as e:
                                 st.warning(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
 
-                            # 2. Preparar línea de venta para Supabase (Adaptado a tu tabla)
+                            # 2. Preparar línea de venta con las llaves EXACTAS de Supabase
                             registro_linea = {
                                 "folio": transaccion_id_actual,
                                 "rut_empresa": rut_actual,
-                                "fecha": fecha_hora_actual.strftime('%Y-%m-%d %H:%M:%S'),
-                                "detalle": str(item["Descripción"]),
-                                "monto": float(item["Subtotal"]),
-                                "metodo_pago": forma_pago,
+                                "fecha": fecha_hora_actual.strftime("%Y-%m-%d %H:%M:%S"),
+                                "caja": caja_actual, 
                                 "documento": tipo_documento,
-                                "caja": caja_actual
+                                "detalle": f"{item['Descripción']} (x{int(item['Cantidad'])})",
+                                "monto": float(item["Subtotal"]), 
+                                "metodo_pago": forma_pago
                             }
                             
                             try:
                                 res_venta = supabase.table("ventas").insert(registro_linea).execute()
                                 if not res_venta.data:
-                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}. Verifica la estructura de la tabla 'ventas'.")
+                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}.")
                                     venta_exitosa = False
                             except Exception as e:
                                 st.error(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")

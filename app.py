@@ -2698,10 +2698,365 @@ elif menu == "⚙️ Configuración General":
                 except Exception as e:
                     st.error(f"❌ Ocurrió un error al procesar el archivo: {e}")
 
-# ----------------- SECCIÓN VENTAS / POS RÁPIDO (CONECTADO A LA NUBE) -----------------
+# ----------------- SECCIÓN VENTAS / POS RÁPIDO (CONECTADO A LA NUBE Y AISLADO) -----------------
 elif menu == "💰 Módulo de Ventas (POS)":
-    import caja_ventas
-    caja_ventas.mostrar_modulo_ventas(ruta_negocio)
+    caja_actual = param_caja if param_caja else "Caja Principal"
+    rut_actual = st.session_state.get("negocio_seleccionado")
+    mostrar_encabezado_con_home(f"Terminal de Ventas - {caja_actual}")
+
+    tipo_documento = st.selectbox("Selecciona el documento:", ["Boleta Electrónica", "Factura Electrónica", "Guía de Despacho"])
+    
+    modo_inventario = st.radio(
+        "📦 Modo de trabajo del POS:",
+        ["Control Estricto de Stock (Alerta si no hay inventario)", "Venta Libre / Solo Base de Datos"],
+        horizontal=True,
+        key="radio_modo_inventario"
+    )
+    controlar_stock = "Estricto" in modo_inventario
+
+    cliente_nombre, cliente_rut = "", ""
+
+    # 1. Lógica de Selección de Clientes (Solo para Factura/Guía) BLINDADA POR EMPRESA
+    if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
+        try:
+            # Candado de seguridad: Filtramos estrictamente por el RUT del negocio activo
+            res_clientes = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
+            df_clientes_pos = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
+            
+            # Doble validación por si la columna de empresa en Supabase se llama distinto
+            if df_clientes_pos.empty:
+                res_clientes_alt = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
+                df_clientes_pos = pd.DataFrame(res_clientes_alt.data) if res_clientes_alt.data else pd.DataFrame()
+        except Exception as e:
+            st.error(f"⚠️ Error conectando a la base de clientes en la nube: {e}")
+            df_clientes_pos = pd.DataFrame()
+
+        if not df_clientes_pos.empty and "nombre" in df_clientes_pos.columns:
+            # Concatenamos el nombre y el RUT
+            df_clientes_pos["etiqueta"] = df_clientes_pos["nombre"].astype(str) + " (" + df_clientes_pos["rut"].astype(str) + ")"
+            lista_clientes = df_clientes_pos["etiqueta"].tolist()
+            
+            # Agregamos una opción en blanco al inicio para que no seleccione al primero por defecto
+            lista_clientes.insert(0, "-- Selecciona un cliente --")
+            cliente_elegido = st.selectbox("👤 Selecciona un cliente registrado:", lista_clientes)
+          
+            if cliente_elegido and cliente_elegido != "-- Selecciona un cliente --" and " (" in cliente_elegido:
+                cliente_nombre = cliente_elegido.split(" (")[0]
+                cliente_rut = cliente_elegido.split(" (")[1].replace(")", "")
+        else:
+            st.warning("⚠️ No hay clientes registrados para este negocio en la nube. Agrégalos en el módulo correspondiente.")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1: cliente_nombre = st.text_input("Razón Social / Nombre del Cliente")
+            with col_f2: cliente_rut = st.text_input("RUT / Identificación Tributaria")
+
+    if st.session_state.ultimo_recibo is not None:
+        st.success("🎉 ¡Transacción completada y archivada con éxito!")
+        st.markdown(f'<div class="ticket-box">{st.session_state.ultimo_recibo}</div>', unsafe_allow_html=True)
+      
+        if 'items_recibo_actual' not in st.session_state or st.session_state.items_recibo_actual is None:
+            st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            if tipo_documento == "Guía de Despacho":
+                items_a_imprimir = st.session_state.get('items_recibo_actual', st.session_state.carrito_ventas)
+                pdf_bytes = generar_guia_pdf(cliente_nombre, cliente_rut, items_a_imprimir)
+                st.download_button("📥 Descargar Guía PDF", data=bytes(pdf_bytes), file_name="Guia_Despacho.pdf", mime="application/pdf", use_container_width=True)
+            else:
+                st.download_button("📥 Descargar Recibo", data=st.session_state.ultimo_recibo, file_name="Comprobante.txt", mime="text/plain", use_container_width=True)
+      
+        with col_r2:
+            if st.button("➕ Nueva Venta", use_container_width=True, type="primary"):
+                st.session_state.ultimo_recibo = None
+                st.session_state.estado_pago = False
+                st.session_state.items_recibo_actual = None
+                st.session_state.carrito_ventas = []
+                st.rerun()
+
+    elif st.session_state.estado_pago:
+        st.markdown("### 💳 2. Formas de Pago")
+        if len(st.session_state.carrito_ventas) > 0:
+            df_temp = pd.DataFrame(st.session_state.carrito_ventas)
+            total_venta = df_temp["Subtotal"].sum()
+            st.info(f"💰 **Total a Pagar: ${total_venta:,.2f}**")
+            opciones_pago = list(st.session_state.get("formas_pago_erp", ["Efectivo"]))
+            for extra in ["Consignación", "Fiado", "Crédito"]:
+                if extra not in opciones_pago:
+                    opciones_pago.append(extra)
+            forma_pago = st.selectbox("Selecciona la Forma de Pago:", options=opciones_pago)
+       
+            efectivo_recibido, cambio = total_venta, 0.0
+            if forma_pago == "Efectivo":
+                efectivo_recibido = st.number_input("💵 Dinero Recibido ($):", min_value=0.0, value=float(total_venta), step=100.0)
+                if efectivo_recibido >= total_venta:
+                    cambio = efectivo_recibido - total_venta
+                    st.success(f"🟢 **Vuelto: ${cambio:,.2f}**")
+                else:
+                    st.error("🔴 Monto insuficiente.")
+
+            st.divider()
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                if st.button("⬅️ Volver al Carrito", use_container_width=True):
+                    st.session_state.estado_pago = False
+                    st.rerun()
+            with col_p2:
+                if st.button("✅ Confirmar Pago y Generar", use_container_width=True, type="primary"):
+                    if forma_pago == "Efectivo" and efectivo_recibido < total_venta:
+                        st.warning("⚠️ Monto insuficiente para procesar la venta.")
+                    else:
+                        fecha_hora_actual = datetime.now()
+                        transaccion_id_actual = f"TX_{fecha_hora_actual.strftime('%Y%m%d%H%M%S')}"
+                        lineas_productos = ""
+                        
+                        # --- ☁️ SINCRONIZACIÓN CON SUPABASE: DESCUENTO DE STOCK Y REGISTRO DE VENTA ---
+                        for item in st.session_state.carrito_ventas:
+                            lineas_productos += f"- {item['Descripción']} (x{int(item['Cantidad'])}) ... ${item['Subtotal']:,.2f}\n"
+                            
+                            # 1. Descontar Stock en Supabase
+                            try:
+                                res_stock = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                                if res_stock.data:
+                                    stock_actual = float(res_stock.data[0]["stock"] or 0.0)
+                                    nuevo_stock = stock_actual - float(item["Cantidad"])
+                                    supabase.table("productos").update({"stock": nuevo_stock}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
+                            except Exception as e:
+                                st.warning(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
+
+                            # 2. Preparar línea de venta para Supabase 
+                            registro_linea = {
+                                "rut_empresa": rut_actual,
+                                "transaccion_id": transaccion_id_actual,
+                                "fecha_hora": fecha_hora_actual.isoformat(),
+                                "caja": caja_actual, 
+                                "documento": tipo_documento,
+                                "cliente": cliente_nombre if cliente_nombre else "Cliente General",
+                                "codigo_producto": str(item["Código"]), 
+                                "descripcion": str(item["Descripción"]),
+                                "cantidad": float(item["Cantidad"]), 
+                                "precio_unitario": float(item["Precio Unitario"]),
+                                "subtotal": float(item["Subtotal"]), 
+                                "forma_pago": forma_pago,
+                                "total_boleta": float(total_venta)
+                            }
+                            
+                            try:
+                                res_venta = supabase.table("ventas").insert(registro_linea).execute()
+                                if not res_venta.data:
+                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}. Revisa los nombres de las columnas.")
+                            except Exception as e:
+                                st.error(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")
+
+                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE ---
+                        cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
+                       
+                        st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
+                        
+                        texto_recibo = f"""
+========================================
+       {cfg.get('nombre_empresa', 'MI EMPRESA')}
+       RUT: {cfg.get('rut_empresa', '00.000.000-0')}
+       {cfg.get('direccion', 'Santiago')}
+========================================
+DOCUMENTO: {tipo_documento.upper()}
+FECHA: {fecha_hora_actual.strftime('%d/%m/%Y %H:%M:%S')}
+TERMINAL: {caja_actual}
+----------------------------------------
+{('CLIENTE: ' + cliente_nombre + ' | RUT: ' + cliente_rut + '\n----------------------------------------\n') if tipo_documento in ['Factura Electrónica', 'Guía de Despacho'] else ''}DETALLE:
+{lineas_productos}----------------------------------------
+TOTAL: ${total_venta:,.2f}
+PAGO: {forma_pago.upper()}
+{('RECIBIDO: $' + f'{efectivo_recibido:,.2f}' + '\nVUELTO: $' + f'{cambio:,.2f}') if forma_pago == 'Efectivo' else ''}
+========================================
+{cfg.get('pie_pagina', 'Gracias por su preferencia')}
+========================================"""
+                        
+                        try:
+                            carpeta_tipo = tipo_documento.lower().replace(" ", "_").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+                            dir_archivador = os.path.join(ruta_negocio, "archivador_ventas", carpeta_tipo)
+                            os.makedirs(dir_archivador, exist_ok=True)
+                            
+                            ruta_completa_doc = os.path.join(dir_archivador, f"{transaccion_id_actual}.txt")
+                            
+                            with open(ruta_completa_doc, "w", encoding="utf-8") as f_doc:
+                                f_doc.write(texto_recibo)
+                        except Exception as e:
+                            print(f"Error al guardar en el archivador: {e}")
+
+                        st.session_state.ultimo_recibo = texto_recibo
+                        st.session_state.estado_pago = False
+                        st.rerun()
+
+        else:
+            st.warning("⚠️ Carrito vacío.")
+            if st.button("Volver"):
+                st.session_state.estado_pago = False
+                st.rerun()
+
+    else:
+        # --- LÓGICA DE INVENTARIO CONECTADA A LA NUBE (POS) ---
+        df_nube = pd.DataFrame()
+        try:
+            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock").eq("rut_empresa", rut_actual).limit(10000).execute()
+            if res_pos.data:
+                df_nube = pd.DataFrame(res_pos.data)
+        except Exception as e:
+            st.error(f"⚠️ Error conectando al inventario en la nube: {e}")
+
+        if not df_nube.empty:
+            col_cod = 'codigo'
+            col_desc = 'descripcion'
+            col_precio = 'precio_venta'
+            col_stock = 'stock'
+
+            metodo_lectura = st.radio("Método de entrada de código:", ["⌨️ Digitar / Lector Físico", "📷 Usar Cámara del Celular"], horizontal=True, key="radio_metodo_pos")
+
+            codigo_escan_pos = ""
+
+            if metodo_lectura == "📷 Usar Cámara del Celular":
+                st.markdown("Apunta la cámara al código de barras y captura la foto:")
+                foto_capturada = st.camera_input("Capturar código de barras", key="cam_pos")
+                if foto_capturada is not None:
+                    st.success("✔️ ¡Foto capturada con éxito!")
+            else:
+                codigo_escan_pos = st.text_input("📷 Digita el código o usa tu pistola láser:", key="input_escan_pos")
+
+            opciones_productos = ["-- Selecciona o busca un producto --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_nube.iterrows()]
+            prod_sugerido_pos_idx = 0
+       
+            if codigo_escan_pos:
+                match_pos = df_nube[df_nube[col_cod].astype(str) == str(codigo_escan_pos)]
+                if not match_pos.empty:
+                    match_str_pos = f"{match_pos.iloc[0][col_cod]} - {match_pos.iloc[0][col_desc]}"
+                    if match_str_pos in opciones_productos:
+                        prod_sugerido_pos_idx = opciones_productos.index(match_str_pos)
+                        st.success(f"✔️ Producto detectado: {match_str_pos}")
+                    
+                        st.session_state.precio_actual_input = float(match_pos.iloc[0][col_precio] or 0.0)
+                        st.session_state.ultimo_prod_sel = match_str_pos
+
+            if "ultimo_prod_sel" not in st.session_state:
+                st.session_state.ultimo_prod_sel = ""
+            if "precio_actual_input" not in st.session_state:
+                st.session_state.precio_actual_input = 0.0
+
+            producto_seleccionado = st.selectbox(
+                "O selecciona manualmente el producto:",
+                options=opciones_productos,
+                index=prod_sugerido_pos_idx,
+                key="selectbox_producto_venta"
+            )
+        
+            if producto_seleccionado != st.session_state.ultimo_prod_sel:
+                st.session_state.ultimo_prod_sel = producto_seleccionado
+                if producto_seleccionado != "-- Selecciona o busca un producto --":
+                    c_buscado = producto_seleccionado.split(" - ")[0]
+                    match_row = df_nube[df_nube[col_cod].astype(str) == str(c_buscado)]
+                    if not match_row.empty:
+                        st.session_state.precio_actual_input = float(match_row.iloc[0][col_precio] or 0.0)
+                else:
+                    st.session_state.precio_actual_input = 0.0
+
+            with st.form("form_agregar_item"):
+                col_cant, col_precio_input = st.columns(2)
+                with col_cant:
+                    cantidad_vendida = st.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, format="%.2f")
+                with col_precio_input:
+                    precio_venta = st.number_input("Precio Unitario ($)", min_value=0.0, step=1.0, value=float(st.session_state.precio_actual_input))
+
+                btn_agregar = st.form_submit_button("➕ Agregar al Carrito de Venta")
+
+                if btn_agregar:
+                    if producto_seleccionado == "-- Selecciona o busca un producto --":
+                        st.warning("⚠️ Selecciona un producto válido.")
+                    else:
+                        c_buscado = producto_seleccionado.split(" - ")[0]
+                        match_row = df_nube[df_nube[col_cod].astype(str) == str(c_buscado)]
+                        
+                        stock_disponible = 0.0
+                        if not match_row.empty:
+                            stock_disponible = float(match_row.iloc[0][col_stock] or 0.0)
+
+                        unidades_en_carrito = sum(item["Cantidad"] for item in st.session_state.carrito_ventas if item["Código"] == c_buscado)
+                        total_intentado = unidades_en_carrito + float(cantidad_vendida)
+
+                        if controlar_stock and total_intentado > stock_disponible:
+                            st.error(f"🚨 **¡Inventario Insuficiente en la Nube!** Stock disponible: {stock_disponible:,.2f} | Intentas vender: {total_intentado:,.2f}")
+                        else:
+                            st.session_state.carrito_ventas.append({
+                                "Código": c_buscado,
+                                "Descripción": producto_seleccionado.split(" - ")[1],
+                                "Cantidad": float(cantidad_vendida),
+                                "Precio Unitario": float(precio_venta),
+                                "Subtotal": float(cantidad_vendida) * float(precio_venta)
+                            })
+                            st.success("✅ Producto agregado con éxito.")
+                            st.rerun()
+        else:
+            st.info("ℹ️ Aún no hay productos registrados en tu base de datos en la nube.")
+
+        st.divider()
+        st.markdown("### 🛒 Carrito de Venta Actual:")
+        if len(st.session_state.carrito_ventas) > 0:
+            total_general, indices_a_eliminar = 0.0, []
+            col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([1.2, 2.5, 1.2, 1.5, 1.5, 0.8])
+            col_h1.markdown("**Código**"); col_h2.markdown("**Descripción**"); col_h3.markdown("**Cantidad**"); col_h4.markdown("**Precio Unitario**"); col_h5.markdown("**Subtotal**"); col_h6.markdown("**Acción**")
+            st.divider()
+
+            for i, item in enumerate(st.session_state.carrito_ventas):
+                col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns([1.2, 2.5, 1.2, 1.5, 1.5, 0.8])
+                with col_c1: st.text(item["Código"])
+                with col_c2: st.text(item["Descripción"])
+                with col_c3:
+                    nc = st.number_input("Cant", min_value=0.01, step=0.1, value=float(item["Cantidad"]), format="%.2f", key=f"cant_{i}", label_visibility="collapsed")
+                    st.session_state.carrito_ventas[i]["Cantidad"] = nc
+                    st.session_state.carrito_ventas[i]["Subtotal"] = nc * st.session_state.carrito_ventas[i]["Precio Unitario"]
+                with col_c4:
+                    np = st.number_input("Prec", min_value=0.0, step=1.0, value=float(item["Precio Unitario"]), key=f"prec_{i}", label_visibility="collapsed")
+                    st.session_state.carrito_ventas[i]["Precio Unitario"] = np
+                    st.session_state.carrito_ventas[i]["Subtotal"] = st.session_state.carrito_ventas[i]["Cantidad"] * np
+                with col_c5:
+                    sub = st.session_state.carrito_ventas[i]["Subtotal"]
+                    st.text(f"${sub:,.2f}")
+                    total_general += sub
+                with col_c6:
+                    if st.button("🗑️", key=f"del_{i}"): indices_a_eliminar.append(i)
+
+            if indices_a_eliminar:
+                for idx in sorted(indices_a_eliminar, reverse=True): st.session_state.carrito_ventas.pop(idx)
+                st.rerun()
+
+            st.divider()
+            st.markdown(f"### 💰 **Total a Pagar: ${total_general:,.2f}**")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("🗑️ Vaciar Carrito Completo", use_container_width=True):
+                    st.session_state.carrito_ventas = []
+                    st.rerun()
+            with col_b2:
+                if st.button("[F12] 💳 Cobrar", use_container_width=True, key="btn_cobrar_principal") or st.session_state.get('ejecutar_cobro', False):
+                    st.session_state.ejecutar_cobro = False
+                    st.session_state.estado_pago = True
+                    st.rerun()
+        else:
+            st.info("ℹ️ Carrito vacío.")
+
+        components.html("""
+        <script>
+        const doc = window.parent.document;
+        doc.addEventListener('keydown', function(e) {
+            if (e.key === 'F12') {
+                e.preventDefault();
+                doc.querySelectorAll('button').forEach(btn => { if (btn.innerText.includes('Cobrar')) btn.click(); });
+            } else if (e.key === 'Enter') {
+                const activeEl = doc.activeElement;
+                if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.getAttribute('role') === 'combobox')) {
+                    doc.querySelectorAll('button').forEach(btn => { if (btn.innerText.includes('Agregar al Carrito de Venta')) btn.click(); });
+                }
+            }
+        });
+        </script>
+        """, height=0)
 
 elif menu == "📑 Cuentas por Cobrar":
     mostrar_modulo_cuentas_por_cobrar(ruta_negocio)

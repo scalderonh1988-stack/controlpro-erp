@@ -7,7 +7,7 @@ from supabase import create_client, Client
 
 # --- CONFIGURACIÓN DE LA NUBE (SUPABASE) ---
 SUPABASE_URL = "https://dmkjlcjrobszhwasrofc.supabase.co"
-SUPABASE_KEY = "sb_publishable_uGVmMWz7T9aShxTMm_Vrgw_QFvRyTmH"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRta2psY2pyb2Jzemh3YXNyb2ZjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjA1NjY3OCwiZXhwIjoyMTAxNjMyNjc4fQ.PSk-oNFl16Inaidztx3ixOz0ahzQuV1SvF4CBhl44gg"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 BASE_TENANTS_DIR = "clientes"

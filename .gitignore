@@ -1,0 +1,4 @@
+__pycache__/
+*.xlsx
+app_local.py
+migrar_*.py

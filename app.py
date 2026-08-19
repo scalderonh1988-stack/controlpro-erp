@@ -1503,46 +1503,57 @@ elif menu == "📦 Inventario y Productos":
     with tab_prod:
         st.markdown("### 📦 Administración de Productos (Nube)")
         
-        # --- Formulario de Creación ---
+        # --- Formulario de Creación (Actualizado a 2 Columnas) ---
         with st.expander("➕ Registrar Nuevo Producto", expanded=False):
-            with st.form("form_nuevo_producto", clear_on_submit=True):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    codigo = st.text_input("Código de Barras (SKU) *")
-                    dun14 = st.text_input("Código DUN-14 (Caja/Display)")
-                    descripcion = st.text_input("Descripción *")
-                    categoria = st.text_input("Categoría")
-                with col2:
-                    formato_envase = st.text_input("Formato Envase")
-                    unidad = st.text_input("Unidad de Medida")
-                    costo = st.number_input("Costo Neto ($) *", min_value=0.0, step=100.0)
-                    precio_venta = st.number_input("Precio Venta ($) *", min_value=0.0, step=100.0)
-                with col3:
-                    stock_inicial = st.number_input("Stock Inicial *", min_value=0.0, step=1.0)
-                    impuesto_especifico = st.number_input("Impuesto Específico (%)", min_value=0.0)
-                    es_exento = st.checkbox("Exento de IVA")
-                    disponible_venta = st.checkbox("Disponible Venta", value=True)
-                    activo = st.checkbox("Activo", value=True)
+            with st.form("form_nuevo_producto_inventario", clear_on_submit=True):
+                col1, col2 = st.columns(2)
 
-                if st.form_submit_button("💾 Guardar Producto", type="primary"):
-                    if not codigo or not descripcion:
-                        st.warning("⚠️ Código y Descripción son obligatorios.")
-                    else:
-                        try:
-                            nuevo_prod = {
-                                "rut_empresa": str(rut_actual), "codigo": str(codigo).strip(),
-                                "descripcion": str(descripcion).strip(), "formato_envase": formato_envase,
-                                "unidad": unidad, "costo": float(costo), "precio_venta": float(precio_venta),
-                                "dun14": dun14, "categoria": categoria, "es_exento": bool(es_exento),
-                                "impuesto_especifico": float(impuesto_especifico),
-                                "disponible_venta": bool(disponible_venta), "activo": bool(activo),
-                                "stock": float(stock_inicial)
-                            }
-                            supabase.table("productos").insert(nuevo_prod).execute()
-                            st.success(f"✅ Producto '{descripcion}' guardado en la Nube.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al guardar (¿Código duplicado?): {e}")
+                with col1:
+                    codigo = st.text_input("Código *", placeholder="Ej: 780123456789")
+                    dun14 = st.text_input("DUN14 (Opcional)", placeholder="Código de caja")
+                    descripcion = st.text_input("Descripción *", placeholder="Ej: BEBIDA ORANGE CRUSH PET300")
+                    categoria = st.selectbox("Categoría", ["Ninguna", "BEBIDAS", "ABARROTES", "SNACKS", "OTROS"])
+                    costo = st.number_input("Costo Neto ($) *", min_value=0.0, step=100.0)
+                    
+                with col2:
+                    precio_venta = st.number_input("Precio de Venta ($) *", min_value=0.0, step=100.0)
+                    stock = st.number_input("Stock Inicial *", min_value=0.0, step=1.0)
+                    es_exento = st.selectbox("¿Es Exento de IVA?", ["No", "Si"])
+                    impuesto_especifico = st.selectbox("Impuesto Específico", ["Ninguno", "IABA 10", "IABA 18", "ILA", "ILA 31.5"])
+                    disponible_venta = st.selectbox("¿Disponible para Venta?", ["Si", "No"])
+                    activo = st.selectbox("¿Activo en el sistema?", ["Si", "No"])
+
+                # El botón oficial para enviar los datos
+                submit_btn = st.form_submit_button("💾 Guardar Producto", type="primary")
+
+            # --- LÓGICA PARA ENVIAR A SUPABASE ---
+            if submit_btn:
+                if codigo == "" or descripcion == "" or precio_venta <= 0:
+                    st.warning("⚠️ Por favor, completa al menos el Código, Descripción y Precio de Venta.")
+                else:
+                    try:
+                        # Empaquetamos los datos transformando "Si"/"No" en True/False para Supabase
+                        nuevo_producto = {
+                            "rut_empresa": str(rut_actual),
+                            "codigo": str(codigo).strip(),
+                            "dun14": str(dun14) if dun14 else None,
+                            "descripcion": str(descripcion).strip(),
+                            "categoria": str(categoria) if categoria != "Ninguna" else None,
+                            "costo": float(costo),
+                            "precio_venta": float(precio_venta), 
+                            "stock": float(stock),
+                            "es_exento": True if es_exento == "Si" else False,
+                            "impuesto_especifico": str(impuesto_especifico) if impuesto_especifico != "Ninguno" else None,
+                            "disponible_venta": True if disponible_venta == "Si" else False,
+                            "activo": True if activo == "Si" else False
+                        }
+                        
+                        # Enviamos a la nube
+                        supabase.table("productos").insert(nuevo_producto).execute()
+                        st.success(f"✅ ¡Producto '{descripcion}' guardado con éxito en la Nube!")
+                        st.rerun() # Recarga la página para mostrarlo en la tabla superior
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar (¿Código duplicado?): {e}")
 
         # --- Catálogo Visual ---
         st.markdown("#### 📋 Catálogo de Inventario Actual")
@@ -1552,7 +1563,7 @@ elif menu == "📦 Inventario y Productos":
             
             if not df_base_nube.empty:
                 # Ordenamos las columnas para la vista
-                cols = ['codigo', 'descripcion', 'stock', 'precio_venta', 'costo', 'categoria', 'formato_envase', 'es_exento', 'disponible_venta']
+                cols = ['codigo', 'descripcion', 'stock', 'precio_venta', 'costo', 'categoria', 'es_exento', 'disponible_venta']
                 df_mostrar = df_base_nube[[c for c in cols if c in df_base_nube.columns]]
                 st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
                 
@@ -1661,7 +1672,7 @@ elif menu == "📦 Inventario y Productos":
             else:
                 st.info("No hay proveedores registrados en la nube todavía.")
         except Exception as e:
-            st.error(f"Error conectando a proveedores (¿Asegúrate de haber creado la tabla 'proveedores' en Supabase?): {e}")
+            st.error(f"Error conectando a proveedores: {e}")
 
 # ----------------- SECCIÓN MERMAS Y AJUSTES DE INVENTARIO -----------------
 elif menu == "📉 Mermas y Ajustes":

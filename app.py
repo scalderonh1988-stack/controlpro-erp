@@ -2451,29 +2451,53 @@ PRODUCTO INGRESADO:
             st.markdown("### 🆕 Ingresar Nuevo Producto a la Base de Datos")
             codigo_scanned_nuevo = st.text_input("📷 Digita o ingresa el código del producto nuevo:", key="scan_nuevo_prod")
         
-            with st.form("form_crear_producto"):
-                n_codigo = st.text_input("Código del Producto (EAN o Interno)", value=codigo_scanned_nuevo if codigo_scanned_nuevo else "")
-                n_desc = st.text_input("Descripción / Nombre del Producto")
-                n_stock = st.number_input("Stock Inicial", min_value=0.0, step=1.0, value=0.0)
-                n_costo = st.number_input("Costo de Compra Neto ($)", min_value=0.0, step=1.0, value=0.0)
-                n_precio = st.number_input("Precio de Venta ($)", min_value=0.0, step=1.0, value=0.0)
+            with st.form("form_crear_producto_compras", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    codigo = st.text_input("Código del Producto (EAN o Interno) *", value=codigo_scanned_nuevo if codigo_scanned_nuevo else "")
+                    dun14 = st.text_input("DUN14 (Opcional)", placeholder="Código de caja")
+                    descripcion = st.text_input("Descripción / Nombre del Producto *", placeholder="Ej: BEBIDA ORANGE CRUSH PET300")
+                    categoria = st.selectbox("Categoría", ["Ninguna", "BEBIDAS", "ABARROTES", "SNACKS", "OTROS"])
+                    costo = st.number_input("Costo de Compra Neto ($)", min_value=0.0, step=100.0)
+                    
+                with col2:
+                    precio_venta = st.number_input("Precio de Venta ($) *", min_value=0.0, step=100.0)
+                    stock = st.number_input("Stock Inicial", min_value=0.0, step=1.0)
+                    es_exento = st.selectbox("¿Es Exento de IVA?", ["No", "Si"])
+                    impuesto_especifico = st.selectbox("Impuesto Específico", ["Ninguno", "IABA 18", "ILA", "ILA 31.5"])
+                    disponible_venta = st.selectbox("¿Disponible para Venta?", ["Si", "No"])
+                    activo = st.selectbox("¿Activo en el sistema?", ["Si", "No"])
             
                 btn_crear_prod = st.form_submit_button("💾 Agregar Producto a la Base de Datos")
 
                 if btn_crear_prod:
-                    if n_codigo and n_desc:
-                        nuevo_prod_df = pd.DataFrame([{
-                            col_cod: str(n_codigo),
-                            col_desc: str(n_desc),
-                            col_stock if col_stock else 'Stock': float(n_stock),
-                            col_precio if col_precio else 'Precio': float(n_precio)
-                        }])
-                        df_actualizado = pd.concat([df_base, nuevo_prod_df], ignore_index=True)
-                        df_actualizado.to_excel(archivo_base, index=False)
-                        st.success(f"✅ ¡Producto '{n_desc}' creado con éxito!")
-                        st.rerun()
+                    if codigo == "" or descripcion == "" or precio_venta <= 0:
+                        st.warning("⚠️ Por favor, completa al menos el Código, Descripción y Precio de Venta (mayor a 0).")
                     else:
-                        st.warning("⚠️ Debes ingresar al menos el código y la descripción.")
+                        # Preparamos el paquete de datos para Supabase
+                        nuevo_producto = {
+                            "rut_empresa": rut_actual,
+                            "codigo": codigo,
+                            "dun14": dun14 if dun14 else None,
+                            "descripcion": descripcion,
+                            "categoria": categoria if categoria != "Ninguna" else None,
+                            "costo": costo,
+                            "precio_venta": precio_venta,
+                            "stock": stock,
+                            "es_exento": es_exento,
+                            "impuesto_especifico": impuesto_especifico if impuesto_especifico != "Ninguno" else None,
+                            "disponible_venta": disponible_venta,
+                            "activo": activo
+                        }
+                        
+                        try:
+                            # Inserción directa en la nube ☁️
+                            supabase.table("productos").insert(nuevo_producto).execute()
+                            st.success(f"✅ ¡Producto '{descripcion}' guardado con éxito en Supabase!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar en la nube: {e}")
 
         # --- 4. EDITAR PRODUCTO EXISTENTE ---
         elif accion_producto == "✏️ Editar Producto Existente":

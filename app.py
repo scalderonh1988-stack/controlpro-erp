@@ -2465,7 +2465,7 @@ PRODUCTO INGRESADO:
                     precio_venta = st.number_input("Precio de Venta ($) *", min_value=0.0, step=100.0)
                     stock = st.number_input("Stock Inicial", min_value=0.0, step=1.0)
                     es_exento = st.selectbox("¿Es Exento de IVA?", ["No", "Si"])
-                    impuesto_especifico = st.selectbox("Impuesto Específico", ["Ninguno", "IABA 18", "ILA", "ILA 31.5"])
+                    impuesto_especifico = st.selectbox("Impuesto Específico", ["Ninguno", "IABA 10", "IABA 18", "ILA", "ILA 31.5"])
                     disponible_venta = st.selectbox("¿Disponible para Venta?", ["Si", "No"])
                     activo = st.selectbox("¿Activo en el sistema?", ["Si", "No"])
             

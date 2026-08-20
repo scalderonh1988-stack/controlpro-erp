@@ -1858,7 +1858,8 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
     mostrar_encabezado_con_home("📈 Módulo Unificado de Informes y Movimientos")
     st.markdown("Consulta y filtra el historial completo de entradas (compras), salidas (ventas) y movimientos de inventario:")
 
-    tab_inf1, tab_inf2 = st.tabs(["📑 Libro de Ventas (Salidas)", "📋 Historial de Compras (Entradas)"])
+    # ¡NUEVO! Agregamos la tercera pestaña para Impuestos
+    tab_inf1, tab_inf2, tab_inf3 = st.tabs(["📑 Libro de Ventas (Salidas)", "📋 Historial de Compras (Entradas)", "🏛️ Impuestos Mensuales"])
 
     # ==========================================
     # PESTAÑA 1: VENTAS (100% NUBE)
@@ -1866,32 +1867,21 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
     with tab_inf1:
         st.markdown("### 💰 Registro de Salidas y Ventas (Nube)")
         try:
-            # Nos conectamos a la tabla 'ventas' de Supabase (Ajusta "id_negocio" si en tu tabla se llama "rut_empresa")
             res_ventas_nube = supabase.table("ventas").select("*").eq("rut_empresa", rut_actual).execute()
             
             if res_ventas_nube.data:
                 df_v = pd.DataFrame(res_ventas_nube.data)
                 
-                # Normalizamos las fechas si existen
                 col_fecha = "fecha_hora" if "fecha_hora" in df_v.columns else ("FechaHora" if "FechaHora" in df_v.columns else None)
                 if col_fecha:
                     df_v[col_fecha] = pd.to_datetime(df_v[col_fecha])
                     df_v["Fecha_Corta"] = df_v[col_fecha].dt.date
                 
-                # Mostramos la tabla en la interfaz
                 st.dataframe(df_v, use_container_width=True)
                
-                # Lógica para sumar el total real detectando tu columna 'monto'
-                tot_v = 0.0
-                if "monto" in df_v.columns:
-                    # Suma directa si la columna se llama 'monto' (como muestra tu tabla)
-                    tot_v = df_v["monto"].sum()
-                elif "transaccion_id" in df_v.columns and "total_boleta" in df_v.columns:
-                    tot_v = df_v.drop_duplicates(subset=["transaccion_id"])["total_boleta"].sum()
-                else:
-                    tot_v = df_v["subtotal"].sum() if "subtotal" in df_v.columns else 0.0
-               
-                st.metric(label="💰 Total Ingresos Netos Reales (Nube)", value=f"${tot_v:,.2f}")
+                # Suma del Monto Bruto (Lo que entró a la caja)
+                tot_bruto = df_v["monto"].sum() if "monto" in df_v.columns else 0.0
+                st.metric(label="💰 Ingresos Brutos (Caja + Impuestos)", value=f"${tot_bruto:,.0f}")
             else:
                 st.info("ℹ️ Aún no hay registros de ventas en la nube para este negocio.")
         except Exception as e:
@@ -1908,13 +1898,40 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
                 df_c = pd.DataFrame(res_compras_nube.data)
                 st.dataframe(df_c, use_container_width=True)
                 
-                # Calcular total invertido usando la columna 'costo_total' de Supabase
                 tot_c = df_c["costo_total"].sum() if "costo_total" in df_c.columns else (df_c["CostoTotal"].sum() if "CostoTotal" in df_c.columns else 0.0)
-                st.metric(label="💵 Total Invertido en Compras (Nube)", value=f"${tot_c:,.2f}")
+                st.metric(label="💵 Total Invertido en Compras Brutas", value=f"${tot_c:,.0f}")
             else:
                 st.info("ℹ️ Aún no hay registros de compras en la nube para este negocio.")
         except Exception as e:
             st.error(f"⚠️ Error al cargar el historial de compras desde Supabase: {e}")
+
+    # ==========================================
+    # PESTAÑA 3: IMPUESTOS (100% NUBE)
+    # ==========================================
+    with tab_inf3:
+        st.markdown("### 🏛️ Proyección de Impuestos Mensuales (SII)")
+        st.info("💡 Este panel calcula de forma automática el acumulado de impuestos basados en tus ventas registradas.")
+        
+        if 'df_v' in locals() and not df_v.empty:
+            # Sumamos las nuevas columnas (si ya existen en la base de datos)
+            tot_neto = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
+            tot_iva = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
+            tot_ila = df_v["impuestos_adicionales"].sum() if "impuestos_adicionales" in df_v.columns else 0.0
+            
+            # Mostramos un panel financiero profesional a 3 columnas
+            col_imp1, col_imp2, col_imp3 = st.columns(3)
+            with col_imp1:
+                st.metric(label="📊 Total Ingresos Netos (Tu Dinero)", value=f"${tot_neto:,.0f}")
+            with col_imp2:
+                st.metric(label="🏛️ IVA Débito (19%)", value=f"${tot_iva:,.0f}")
+            with col_imp3:
+                st.metric(label="🍷 Impuestos Específicos (ILA/IABA)", value=f"${tot_ila:,.0f}")
+                
+            st.divider()
+            total_impuestos = tot_iva + tot_ila
+            st.markdown(f"### 🚨 Total Impuestos a Pagar Aprox: **${total_impuestos:,.0f}**")
+        else:
+            st.warning("⚠️ Necesitamos registros de ventas para calcular tus impuestos.")
 
 # ----------------- SECCIÓN CONTROL Y GESTIÓN DE INVENTARIO -----------------
 elif menu == "⚠️ Control y Gestión de Inventario":

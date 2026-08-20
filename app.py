@@ -1910,44 +1910,58 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
     # ==========================================
     with tab_inf3:
         st.markdown("### 🏛️ Proyección de Impuestos (Acumulado Mensual)")
-        st.info("💡 Este panel cruza tus Ventas (IVA Débito) con tus Compras (IVA Crédito).")
-        
-        # 1. Calcular IVA Débito e ILA (Desde Ventas)
-        tot_neto_ventas = 0.0
-        tot_iva_debito = 0.0
-        tot_ila = 0.0
+        st.info("💡 Este panel cruza tus Ventas (IVA Débito) con tus Compras (IVA Crédito) para calcular tu carga fiscal.")
+
+        # --- 1. CÁLCULO DE VENTAS (DÉBITO) ---
+        tot_neto_ventas, tot_iva_debito, tot_ila_ventas = 0.0, 0.0, 0.0
         if 'df_v' in locals() and not df_v.empty:
             tot_neto_ventas = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
             tot_iva_debito = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
-            tot_ila = df_v["impuesto_especifico"].sum() if "impuesto_especifico" in df_v.columns else 0.0
+            tot_ila_ventas = df_v["impuesto_especifico"].sum() if "impuesto_especifico" in df_v.columns else 0.0
 
-        # 2. Calcular IVA Crédito (Desde Compras)
-        tot_iva_credito = 0.0
+        st.markdown("#### 🔵 VENTAS (Impuestos Débito)")
+        col_v1, col_v2, col_v3 = st.columns(3)
+        with col_v1:
+            st.metric(label="📊 Ventas Netas", value=f"${tot_neto_ventas:,.0f}")
+        with col_v2:
+            st.metric(label="🏛️ IVA Débito (Ventas)", value=f"${tot_iva_debito:,.0f}")
+        with col_v3:
+            st.metric(label="🍷 Imp. Específicos Débito", value=f"${tot_ila_ventas:,.0f}")
+
+        st.divider()
+
+        # --- 2. CÁLCULO DE COMPRAS (CRÉDITO) ---
+        tot_neto_compras, tot_iva_credito, tot_ila_compras = 0.0, 0.0, 0.0
         if 'df_c' in locals() and not df_c.empty:
-            # Si tienes columna 'iva' en compras la usa. Si no, estima matemáticamente desde el costo total asumiendo 19%
+            # Detecta si ya tienes las columnas neto e iva en compras, o las calcula aproximadas desde el costo total
+            if "neto" in df_c.columns:
+                tot_neto_compras = df_c["neto"].sum()
+            else:
+                tot_neto_compras = (df_c["costo_total"].sum() / 1.19) if "costo_total" in df_c.columns else 0.0
+                
             if "iva" in df_c.columns:
                 tot_iva_credito = df_c["iva"].sum()
-            elif "costo_total" in df_c.columns:
-                tot_iva_credito = (df_c["costo_total"].sum() / 1.19) * 0.19
+            else:
+                tot_iva_credito = tot_neto_compras * 0.19
 
-        # Panel de 4 métricas
-        col_imp1, col_imp2, col_imp3, col_imp4 = st.columns(4)
-        with col_imp1:
-            st.metric(label="📊 Ventas Netas", value=f"${tot_neto_ventas:,.0f}")
-        with col_imp2:
-            st.metric(label="🏛️ IVA Débito (Ventas)", value=f"${tot_iva_debito:,.0f}")
-        with col_imp3:
+            tot_ila_compras = df_c["impuesto_especifico"].sum() if "impuesto_especifico" in df_c.columns else 0.0
+
+        st.markdown("#### 🟢 COMPRAS (Impuestos Crédito)")
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            st.metric(label="🛒 Compras Netas", value=f"${tot_neto_compras:,.0f}")
+        with col_c2:
             st.metric(label="💳 IVA Crédito (Compras)", value=f"${tot_iva_credito:,.0f}")
-        with col_imp4:
-            st.metric(label="🍷 Imp. Específico (ILA)", value=f"${tot_ila:,.0f}")
-            
+        with col_c3:
+            st.metric(label="🍷 Imp. Específicos Crédito", value=f"${tot_ila_compras:,.0f}")
+
         st.divider()
         
-        # Fórmula contable: IVA a Pagar = IVA Débito - IVA Crédito
+        # --- 3. RESULTADO FINAL PARA EL FISCO ---
         iva_a_pagar = tot_iva_debito - tot_iva_credito
         iva_efectivo = iva_a_pagar if iva_a_pagar > 0 else 0.0
         
-        total_impuestos = iva_efectivo + tot_ila
+        total_impuestos = iva_efectivo + tot_ila_ventas
         
         st.markdown(f"### 🚨 Total a Pagar Fisco Aprox: **${total_impuestos:,.0f}**")
         
@@ -3120,7 +3134,8 @@ PAGO: {forma_pago.upper()}
                             stock_disponible = float(fila[col_stock] or 0.0)
                             
                             # Capturamos datos tributarios del producto
-                            es_exento = bool(fila.get("es_exento", False))
+                            valor_exento = fila.get("es_exento", False)
+                            es_exento = valor_exento in [True, "Si", "si", "Sí", "sí", "1"]
                             imp_esp_str = str(fila.get("impuesto_especifico", "Ninguno")).upper()
                             
                             # Extraemos el porcentaje del impuesto específico automáticamente

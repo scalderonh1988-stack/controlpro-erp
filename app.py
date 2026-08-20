@@ -1910,30 +1910,49 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
     # ==========================================
     with tab_inf3:
         st.markdown("### 🏛️ Proyección de Impuestos (Acumulado Mensual)")
-        st.info("💡 Este panel suma los impuestos exactos registrados en cada boleta al momento de la venta.")
+        st.info("💡 Este panel cruza tus Ventas (IVA Débito) con tus Compras (IVA Crédito).")
         
+        # 1. Calcular IVA Débito e ILA (Desde Ventas)
+        tot_neto_ventas = 0.0
+        tot_iva_debito = 0.0
+        tot_ila = 0.0
         if 'df_v' in locals() and not df_v.empty:
-            # Leemos las columnas exactas de tu Supabase
-            tot_neto = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
-            tot_iva = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
-            
-            # Usamos tu columna ya creada
+            tot_neto_ventas = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
+            tot_iva_debito = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
             tot_ila = df_v["impuesto_especifico"].sum() if "impuesto_especifico" in df_v.columns else 0.0
+
+        # 2. Calcular IVA Crédito (Desde Compras)
+        tot_iva_credito = 0.0
+        if 'df_c' in locals() and not df_c.empty:
+            # Si tienes columna 'iva' en compras la usa. Si no, estima matemáticamente desde el costo total asumiendo 19%
+            if "iva" in df_c.columns:
+                tot_iva_credito = df_c["iva"].sum()
+            elif "costo_total" in df_c.columns:
+                tot_iva_credito = (df_c["costo_total"].sum() / 1.19) * 0.19
+
+        # Panel de 4 métricas
+        col_imp1, col_imp2, col_imp3, col_imp4 = st.columns(4)
+        with col_imp1:
+            st.metric(label="📊 Ventas Netas", value=f"${tot_neto_ventas:,.0f}")
+        with col_imp2:
+            st.metric(label="🏛️ IVA Débito (Ventas)", value=f"${tot_iva_debito:,.0f}")
+        with col_imp3:
+            st.metric(label="💳 IVA Crédito (Compras)", value=f"${tot_iva_credito:,.0f}")
+        with col_imp4:
+            st.metric(label="🍷 Imp. Específico (ILA)", value=f"${tot_ila:,.0f}")
             
-            col_imp1, col_imp2, col_imp3 = st.columns(3)
-            with col_imp1:
-                st.metric(label="📊 Ingresos Netos (Tu Dinero)", value=f"${tot_neto:,.0f}")
-            with col_imp2:
-                st.metric(label="🏛️ IVA Débito Acumulado", value=f"${tot_iva:,.0f}")
-            with col_imp3:
-                st.metric(label="🍷 Impuestos Específicos", value=f"${tot_ila:,.0f}")
-                
-            st.divider()
-            total_impuestos = tot_iva + tot_ila
-            st.markdown(f"### 🚨 Total Impuestos a Pagar Aprox: **${total_impuestos:,.0f}**")
-        else:
-            st.warning("⚠️ Necesitamos registros de ventas para calcular tus impuestos.")
-    
+        st.divider()
+        
+        # Fórmula contable: IVA a Pagar = IVA Débito - IVA Crédito
+        iva_a_pagar = tot_iva_debito - tot_iva_credito
+        iva_efectivo = iva_a_pagar if iva_a_pagar > 0 else 0.0
+        
+        total_impuestos = iva_efectivo + tot_ila
+        
+        st.markdown(f"### 🚨 Total a Pagar Fisco Aprox: **${total_impuestos:,.0f}**")
+        
+        if iva_a_pagar < 0:
+            st.success(f"🎉 Tienes un Remanente de IVA a favor para el próximo mes de: **${abs(iva_a_pagar):,.0f}**")
 
 # ----------------- SECCIÓN CONTROL Y GESTIÓN DE INVENTARIO -----------------
 elif menu == "⚠️ Control y Gestión de Inventario":

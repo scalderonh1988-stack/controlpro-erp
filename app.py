@@ -3134,16 +3134,19 @@ PAGO: {forma_pago.upper()}
                             stock_disponible = float(fila[col_stock] or 0.0)
                             
                             # Capturamos datos tributarios del producto
-                            valor_exento = fila.get("es_exento", False)
-                            es_exento = valor_exento in [True, "Si", "si", "Sí", "sí", "1"]
-                            imp_esp_str = str(fila.get("impuesto_especifico", "Ninguno")).upper()
+                            es_exento = fila.get("es_exento", False) in [True, "Si", "si", "Sí", "sí", "1"]
+                            imp_esp_str = str(fila.get("impuesto_especifico", "")).upper()
                             
-                            # Extraemos el porcentaje del impuesto específico automáticamente
-                            if "10" in imp_esp_str: tasa_ila_item = 0.10
-                            elif "18" in imp_esp_str: tasa_ila_item = 0.18
-                            elif "31.5" in imp_esp_str: tasa_ila_item = 0.315
-                            elif "ILA" in imp_esp_str: tasa_ila_item = 0.315 # ILA por defecto si no dice el número
-
+                            tasa_ila_item = 0.0
+                            # Extraemos el porcentaje EXACTO. Si está vacío o es "Ninguno", se queda en 0.0
+                            if "10" in imp_esp_str: 
+                                tasa_ila_item = 0.10
+                            elif "18" in imp_esp_str: 
+                                tasa_ila_item = 0.18
+                            elif "20.5" in imp_esp_str or "20,5" in imp_esp_str: 
+                                tasa_ila_item = 0.205
+                            elif "31.5" in imp_esp_str or "31,5" in imp_esp_str: 
+                                tasa_ila_item = 0.315
                         unidades_en_carrito = sum(item["Cantidad"] for item in st.session_state.carrito_ventas if item["Código"] == c_buscado)
                         total_intentado = unidades_en_carrito + float(cantidad_vendida)
 

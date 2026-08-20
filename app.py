@@ -1112,28 +1112,51 @@ elif menu == "📦 Inventario y Productos":
             
             with st.form("form_nuevo_producto", clear_on_submit=True):
                 st.markdown("##### Nuevo Producto")
-                c_cod = st.text_input("Código")
-                c_desc = st.text_input("Descripción")
-                c_costo = st.number_input("Costo ($)", min_value=0.0, step=100.0)
-                c_pv = st.number_input("Precio de Venta ($)", min_value=0.0, step=100.0)
-                c_stock = st.number_input("Stock Inicial", min_value=0, step=1)
-                
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    codigo = st.text_input("Código *", placeholder="Ej: 780123456789")
+                    dun14 = st.text_input("DUN14 (Opcional)", placeholder="Código de caja")
+                    descripcion = st.text_input("Descripción *", placeholder="Ej: BEBIDA ORANGE CRUSH PET300")
+                    categoria = st.selectbox("Categoría", ["Ninguna", "BEBIDAS", "ABARROTES", "SNACKS", "OTROS"])
+                    costo = st.number_input("Costo ($)", min_value=0.0, step=100.0)
+                    
+                with col2:
+                    precio_venta = st.number_input("Precio de Venta ($) *", min_value=0.0, step=100.0)
+                    stock = st.number_input("Stock Inicial", min_value=0.0, step=1.0)
+                    es_exento = st.selectbox("¿Es Exento de IVA?", ["No", "Si"])
+                    impuesto_especifico = st.selectbox("Impuesto Específico", ["Ninguno", "IABA 10", "IABA 18", "ILA", "ILA 31.5"])
+                    disponible_venta = st.selectbox("¿Disponible para Venta?", ["Si", "No"])
+                    activo = st.selectbox("¿Activo en el sistema?", ["Si", "No"])
+
                 btn_g_prod = st.form_submit_button("💾 Guardar Producto")
+                
                 if btn_g_prod:
-                    if not c_cod or not c_desc:
-                        st.warning("⚠️ Ingresa el código y la descripción.")
+                    if not codigo or not descripcion or precio_venta <= 0:
+                        st.warning("⚠️ Ingresa al menos el código, la descripción y el precio de venta.")
                     else:
-                        nuevo_p = {
+                        nuevo_producto = {
                             "rut_empresa": rut_actual,
-                            "codigo": str(c_cod),
-                            "descripcion": c_desc,
-                            "costo": c_costo,
-                            "precio_venta": c_pv,
-                            "stock": c_stock
+                            "codigo": str(codigo).strip(),
+                            "dun14": dun14 if dun14 else None,
+                            "descripcion": descripcion.strip(),
+                            "categoria": categoria if categoria != "Ninguna" else None,
+                            "costo": costo,
+                            "precio_venta": precio_venta,
+                            "stock": stock,
+                            "es_exento": es_exento,
+                            "impuesto_especifico": impuesto_especifico if impuesto_especifico != "Ninguno" else None,
+                            "disponible_venta": disponible_venta,
+                            "activo": activo
                         }
-                        supabase.table("productos").upsert(nuevo_p, on_conflict="rut_empresa, codigo").execute()
-                        st.success("✅ ¡Producto registrado con éxito en la Nube!")
-                        st.rerun()
+                        
+                        try:
+                            # Utilizamos el método upsert que tenías para no chocar si el código ya existe
+                            supabase.table("productos").upsert(nuevo_producto, on_conflict="rut_empresa, codigo").execute()
+                            st.success("✅ ¡Producto registrado con éxito en la Nube!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar en Supabase: {e}")
         except Exception as e:
             st.error(f"⚠️ Error al conectar con Supabase: {e}")
 

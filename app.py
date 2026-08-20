@@ -1106,7 +1106,7 @@ if menu == "🏠 Home / Bienvenida":
 elif menu == "📦 Inventario y Productos":
     mostrar_encabezado_con_home("📦 Administración de Inventario")
     
-    tab_inv1, tab_inv2, tab_inv3 = st.tabs(["📦 Productos", "👥 Clientes", "🚚 Proveedores"])
+    tab_inv1, tab_inv2, tab_inv3, tab_inv4 = st.tabs(["📦 Productos", "👥 Clientes", "🚚 Proveedores", "🏢 Bodegas y Sucursales"])
     
     with tab_inv1:
         st.markdown("#### ➕ Registrar o Gestionar Productos")
@@ -1281,6 +1281,52 @@ elif menu == "📦 Inventario y Productos":
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error al guardar en Supabase: {e}")
+
+    # ==========================================
+    # PESTAÑA 4: BODEGAS (100% NUBE)
+    # ==========================================
+    with tab_inv4:
+        st.markdown("### 🏢 Administración de Bodegas y Sucursales")
+        st.info("💡 Crea diferentes ubicaciones físicas para controlar el stock separado (Ej: Sala de Ventas, Bodega Central, Local 2).")
+        
+        # 1. Mostrar Bodegas Actuales
+        df_bodegas = pd.DataFrame()
+        try:
+            res_bodegas = supabase.table("bodegas").select("*").eq("rut_empresa", rut_actual).execute()
+            if res_bodegas.data:
+                df_bodegas = pd.DataFrame(res_bodegas.data)
+                st.dataframe(df_bodegas[["nombre", "direccion"]], use_container_width=True)
+            else:
+                st.warning("⚠️ No tienes bodegas creadas. El sistema asume una 'Bodega Principal' por defecto.")
+        except Exception as e:
+            st.error(f"⚠️ Error cargando bodegas desde la nube: {e}")
+
+        # 2. Formulario para Nueva Bodega
+        with st.form("form_nueva_bodega", clear_on_submit=True):
+            st.markdown("##### Registrar Nueva Bodega")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                nombre_bodega = st.text_input("Nombre de la Bodega *", placeholder="Ej: Bodega Central")
+            with col_b2:
+                direccion_bodega = st.text_input("Ubicación / Dirección", placeholder="Opcional")
+            
+            btn_g_bodega = st.form_submit_button("💾 Crear Bodega")
+            
+            if btn_g_bodega:
+                if not nombre_bodega:
+                    st.warning("⚠️ El nombre de la bodega es obligatorio.")
+                else:
+                    nueva_bodega = {
+                        "rut_empresa": rut_actual,
+                        "nombre": nombre_bodega.strip(),
+                        "direccion": direccion_bodega.strip()
+                    }
+                    try:
+                        supabase.table("bodegas").insert(nueva_bodega).execute()
+                        st.success(f"✅ ¡Bodega '{nombre_bodega}' creada con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar en Supabase: {e}")                    
 
 elif menu == "📚 Historial de Ventas":
     mostrar_modulo_historial_ventas(ruta_negocio)                    

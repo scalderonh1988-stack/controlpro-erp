@@ -2850,11 +2850,9 @@ elif menu == "💰 Módulo de Ventas (POS)":
     # 1. Lógica de Selección de Clientes (Solo para Factura/Guía) BLINDADA POR EMPRESA
     if tipo_documento in ["Factura Electrónica", "Guía de Despacho"]:
         try:
-            # Candado de seguridad: Filtramos estrictamente por el RUT del negocio activo
             res_clientes = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
             df_clientes_pos = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
             
-            # Doble validación por si la columna de empresa en Supabase se llama distinto
             if df_clientes_pos.empty:
                 res_clientes_alt = supabase.table("clientes").select("rut, nombre").eq("id_negocio", rut_actual).execute()
                 df_clientes_pos = pd.DataFrame(res_clientes_alt.data) if res_clientes_alt.data else pd.DataFrame()
@@ -2863,11 +2861,9 @@ elif menu == "💰 Módulo de Ventas (POS)":
             df_clientes_pos = pd.DataFrame()
 
         if not df_clientes_pos.empty and "nombre" in df_clientes_pos.columns:
-            # Concatenamos el nombre y el RUT
             df_clientes_pos["etiqueta"] = df_clientes_pos["nombre"].astype(str) + " (" + df_clientes_pos["rut"].astype(str) + ")"
             lista_clientes = df_clientes_pos["etiqueta"].tolist()
             
-            # Agregamos una opción en blanco al inicio para que no seleccione al primero por defecto
             lista_clientes.insert(0, "-- Selecciona un cliente --")
             cliente_elegido = st.selectbox("👤 Selecciona un cliente registrado:", lista_clientes)
           
@@ -2942,11 +2938,15 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         
                         venta_exitosa = True
                         
-                        # --- ☁️ SINCRONIZACIÓN CON SUPABASE: DESCUENTO DE STOCK Y REGISTRO DE VENTA ---
+                        # --- 🧠 INTELIGENCIA TRIBUTARIA (IVA Dinámico) ---
+                        # Puedes conectar "config_iva" a tu panel de control (19 Chile, 22 Uruguay)
+                        tasa_iva_global = float(st.session_state.get("config_iva", 19.0)) / 100.0
+                        
+                        # --- ☁️ SINCRONIZACIÓN CON SUPABASE ---
                         for item in st.session_state.carrito_ventas:
                             lineas_productos += f"- {item['Descripción']} (x{int(item['Cantidad'])}) ... ${item['Subtotal']:,.2f}\n"
                             
-                            # 1. Descontar Stock en Supabase
+                            # 1. Descontar Stock
                             try:
                                 res_stock = supabase.table("productos").select("stock").eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
                                 if res_stock.data:
@@ -2956,7 +2956,17 @@ elif menu == "💰 Módulo de Ventas (POS)":
                             except Exception as e:
                                 st.warning(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
 
-                            # 2. Preparar línea de venta FINAL Y COMPLETA para Supabase
+                            # 2. Cálculos Matemáticos de Impuestos
+                            tasa_iva_item = 0.0 if item.get("Es Exento", False) else tasa_iva_global
+                            tasa_ila_item = item.get("Tasa ILA", 0.0)
+                            
+                            monto_bruto = float(item["Subtotal"])
+                            # Fórmula: Bruto = Neto * (1 + IVA + ILA) -> Neto = Bruto / (1 + IVA + ILA)
+                            neto_calculado = monto_bruto / (1.0 + tasa_iva_item + tasa_ila_item)
+                            iva_calculado = neto_calculado * tasa_iva_item
+                            ila_calculado = neto_calculado * tasa_ila_item
+
+                            # 3. Preparar registro final para la tabla VENTAS
                             registro_linea = {
                                 "folio": transaccion_id_actual,
                                 "rut_empresa": rut_actual,
@@ -2967,8 +2977,11 @@ elif menu == "💰 Módulo de Ventas (POS)":
                                 "codigo_producto": str(item["Código"]), 
                                 "detalle": str(item["Descripción"]),
                                 "cantidad": float(item["Cantidad"]), 
-                                "monto": float(item["Subtotal"]), 
-                                "metodo_pago": forma_pago
+                                "monto": monto_bruto,                 # Total pagado por el cliente
+                                "metodo_pago": forma_pago,
+                                "neto": round(neto_calculado, 2),     # Dinero real tuyo
+                                "iva": round(iva_calculado, 2),       # IVA desglosado
+                                "impuesto_especifico": round(ila_calculado, 2) # ILA/IABA desglosado
                             }
                             
                             try:
@@ -2980,11 +2993,10 @@ elif menu == "💰 Módulo de Ventas (POS)":
                                 st.error(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")
                                 venta_exitosa = False
 
-                        # 🛑 SI OCURRIÓ UN ERROR, FRENAMOS LA EJECUCIÓN PARA VER LA ALERTA ROJA
                         if not venta_exitosa:
                             st.stop()
 
-                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE (Solo se ejecuta si la venta fue exitosa) ---
+                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE ---
                         cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
                        
                         st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
@@ -3022,7 +3034,8 @@ PAGO: {forma_pago.upper()}
         # --- LÓGICA DE INVENTARIO CONECTADA A LA NUBE (POS) ---
         df_nube = pd.DataFrame()
         try:
-            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock").eq("rut_empresa", rut_actual).limit(10000).execute()
+            # ¡NUEVO! Leemos también si es exento y el impuesto específico
+            res_pos = supabase.table("productos").select("codigo, descripcion, precio_venta, stock, es_exento, impuesto_especifico").eq("rut_empresa", rut_actual).limit(10000).execute()
             if res_pos.data:
                 df_nube = pd.DataFrame(res_pos.data)
         except Exception as e:
@@ -3099,8 +3112,22 @@ PAGO: {forma_pago.upper()}
                         match_row = df_nube[df_nube[col_cod].astype(str) == str(c_buscado)]
                         
                         stock_disponible = 0.0
+                        es_exento = False
+                        tasa_ila_item = 0.0
+                        
                         if not match_row.empty:
-                            stock_disponible = float(match_row.iloc[0][col_stock] or 0.0)
+                            fila = match_row.iloc[0]
+                            stock_disponible = float(fila[col_stock] or 0.0)
+                            
+                            # Capturamos datos tributarios del producto
+                            es_exento = bool(fila.get("es_exento", False))
+                            imp_esp_str = str(fila.get("impuesto_especifico", "Ninguno")).upper()
+                            
+                            # Extraemos el porcentaje del impuesto específico automáticamente
+                            if "10" in imp_esp_str: tasa_ila_item = 0.10
+                            elif "18" in imp_esp_str: tasa_ila_item = 0.18
+                            elif "31.5" in imp_esp_str: tasa_ila_item = 0.315
+                            elif "ILA" in imp_esp_str: tasa_ila_item = 0.315 # ILA por defecto si no dice el número
 
                         unidades_en_carrito = sum(item["Cantidad"] for item in st.session_state.carrito_ventas if item["Código"] == c_buscado)
                         total_intentado = unidades_en_carrito + float(cantidad_vendida)
@@ -3113,7 +3140,9 @@ PAGO: {forma_pago.upper()}
                                 "Descripción": producto_seleccionado.split(" - ")[1],
                                 "Cantidad": float(cantidad_vendida),
                                 "Precio Unitario": float(precio_venta),
-                                "Subtotal": float(cantidad_vendida) * float(precio_venta)
+                                "Subtotal": float(cantidad_vendida) * float(precio_venta),
+                                "Es Exento": es_exento,
+                                "Tasa ILA": tasa_ila_item
                             })
                             st.success("✅ Producto agregado con éxito.")
                             st.rerun()

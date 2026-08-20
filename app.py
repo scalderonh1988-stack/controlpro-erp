@@ -1867,7 +1867,7 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
         st.markdown("### 💰 Registro de Salidas y Ventas (Nube)")
         try:
             # Nos conectamos a la tabla 'ventas' de Supabase (Ajusta "id_negocio" si en tu tabla se llama "rut_empresa")
-            res_ventas_nube = supabase.table("ventas").select("*").eq("id_negocio", rut_actual).execute()
+            res_ventas_nube = supabase.table("ventas").select("*").eq("rut_empresa", rut_actual).execute()
             
             if res_ventas_nube.data:
                 df_v = pd.DataFrame(res_ventas_nube.data)

@@ -1909,29 +1909,31 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
     # PESTAÑA 3: IMPUESTOS (100% NUBE)
     # ==========================================
     with tab_inf3:
-        st.markdown("### 🏛️ Proyección de Impuestos Mensuales (SII)")
-        st.info("💡 Este panel calcula de forma automática el acumulado de impuestos basados en tus ventas registradas.")
+        st.markdown("### 🏛️ Proyección de Impuestos (Acumulado Mensual)")
+        st.info("💡 Este panel suma los impuestos exactos registrados en cada boleta al momento de la venta.")
         
         if 'df_v' in locals() and not df_v.empty:
-            # Sumamos las nuevas columnas (si ya existen en la base de datos)
+            # Leemos las columnas exactas de tu Supabase
             tot_neto = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
             tot_iva = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
-            tot_ila = df_v["impuestos_adicionales"].sum() if "impuestos_adicionales" in df_v.columns else 0.0
             
-            # Mostramos un panel financiero profesional a 3 columnas
+            # Usamos tu columna ya creada
+            tot_ila = df_v["impuesto_especifico"].sum() if "impuesto_especifico" in df_v.columns else 0.0
+            
             col_imp1, col_imp2, col_imp3 = st.columns(3)
             with col_imp1:
-                st.metric(label="📊 Total Ingresos Netos (Tu Dinero)", value=f"${tot_neto:,.0f}")
+                st.metric(label="📊 Ingresos Netos (Tu Dinero)", value=f"${tot_neto:,.0f}")
             with col_imp2:
-                st.metric(label="🏛️ IVA Débito (19%)", value=f"${tot_iva:,.0f}")
+                st.metric(label="🏛️ IVA Débito Acumulado", value=f"${tot_iva:,.0f}")
             with col_imp3:
-                st.metric(label="🍷 Impuestos Específicos (ILA/IABA)", value=f"${tot_ila:,.0f}")
+                st.metric(label="🍷 Impuestos Específicos", value=f"${tot_ila:,.0f}")
                 
             st.divider()
             total_impuestos = tot_iva + tot_ila
             st.markdown(f"### 🚨 Total Impuestos a Pagar Aprox: **${total_impuestos:,.0f}**")
         else:
             st.warning("⚠️ Necesitamos registros de ventas para calcular tus impuestos.")
+    
 
 # ----------------- SECCIÓN CONTROL Y GESTIÓN DE INVENTARIO -----------------
 elif menu == "⚠️ Control y Gestión de Inventario":

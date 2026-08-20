@@ -1881,14 +1881,15 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
                 # Mostramos la tabla en la interfaz
                 st.dataframe(df_v, use_container_width=True)
                
-                # Lógica para sumar el total real sin duplicar boletas
+                # Lógica para sumar el total real detectando tu columna 'monto'
                 tot_v = 0.0
-                if "transaccion_id" in df_v.columns and "total_boleta" in df_v.columns:
+                if "monto" in df_v.columns:
+                    # Suma directa si la columna se llama 'monto' (como muestra tu tabla)
+                    tot_v = df_v["monto"].sum()
+                elif "transaccion_id" in df_v.columns and "total_boleta" in df_v.columns:
                     tot_v = df_v.drop_duplicates(subset=["transaccion_id"])["total_boleta"].sum()
-                elif "TransaccionID" in df_v.columns and "TotalBoleta" in df_v.columns:
-                    tot_v = df_v.drop_duplicates(subset=["TransaccionID"])["TotalBoleta"].sum()
                 else:
-                    tot_v = df_v["subtotal"].sum() if "subtotal" in df_v.columns else (df_v["Subtotal"].sum() if "Subtotal" in df_v.columns else 0.0)
+                    tot_v = df_v["subtotal"].sum() if "subtotal" in df_v.columns else 0.0
                
                 st.metric(label="💰 Total Ingresos Netos Reales (Nube)", value=f"${tot_v:,.2f}")
             else:

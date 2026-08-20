@@ -16,6 +16,15 @@ from cuadratura import mostrar_modulo_cuadratura_diaria
 from historial_ventas import mostrar_modulo_historial_ventas
 from notas_credito import mostrar_modulo_notas_credito
 from cuentas_por_pagar import mostrar_modulo_cuentas_por_pagar
+# Ocultar el menú predeterminado y la marca de agua de Streamlit
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 
 def cargar_maestro_proveedores(ruta_negocio):
     archivo_prov = os.path.join(ruta_negocio, "Maestro_Proveedores.xlsx")
@@ -2536,30 +2545,44 @@ PRODUCTO INGRESADO:
         # --- 4. EDITAR PRODUCTO EXISTENTE ---
         elif accion_producto == "✏️ Editar Producto Existente":
             st.markdown("### ✏️ Modificar datos de un Producto Existente")
+            # Cargamos las opciones directamente desde el DataFrame que ya bajamos de la nube
             opciones_editar = ["-- Selecciona producto a editar --"] + [f"{row[col_cod]} - {row[col_desc]}" for idx, row in df_base.iterrows()]
         
-            with st.form("form_editar_producto"):
+            with st.form("form_editar_producto_compras"):
+                st.info("💡 Deja en 0 o en blanco los campos que NO deseas modificar.")
                 prod_a_editar = st.selectbox("Selecciona Producto", options=opciones_editar)
                 nuevo_nombre = st.text_input("Nueva Descripción / Nombre")
-                nuevo_stock = st.number_input("Modificar Stock Actual", min_value=0.0, step=1.0, value=0.0)
-                nuevo_precio = st.number_input("Modificar Precio de Venta ($)", min_value=0.0, step=1.0, value=0.0)
-                btn_editar_prod = st.form_submit_button("💾 Guardar Cambios")
+                nuevo_precio = st.number_input("Modificar Precio de Venta ($)", min_value=0.0, step=100.0, value=0.0)
+                nuevo_costo = st.number_input("Modificar Costo Neto ($)", min_value=0.0, step=100.0, value=0.0)
+                nuevo_stock = st.number_input("Reemplazar Stock Actual", min_value=0.0, step=1.0, value=0.0)
+                
+                btn_editar_prod = st.form_submit_button("💾 Guardar Cambios en la Nube")
 
                 if btn_editar_prod:
                     if prod_a_editar != "-- Selecciona producto a editar --":
                         cod_editar = prod_a_editar.split(" - ")[0]
-                        match_edit = df_base[df_base[col_cod].astype(str) == str(cod_editar)]
-                        if not match_edit.empty:
-                            idx_e = match_edit.index[0]
-                            if nuevo_nombre:
-                                df_base.at[idx_e, col_desc] = nuevo_nombre
-                            if col_stock:
-                                df_base.at[idx_e, col_stock] = nuevo_stock
-                            if col_precio:
-                                df_base.at[idx_e, col_precio] = nuevo_precio
-                            df_base.to_excel(archivo_base, index=False)
-                            st.success("✅ ¡Producto actualizado correctamente!")
-                            st.rerun()
+                        
+                        # Preparamos solo los datos que el usuario realmente quiere cambiar
+                        datos_a_actualizar = {}
+                        if nuevo_nombre.strip() != "":
+                            datos_a_actualizar["descripcion"] = nuevo_nombre.strip()
+                        if nuevo_precio > 0:
+                            datos_a_actualizar["precio_venta"] = nuevo_precio
+                        if nuevo_costo > 0:
+                            datos_a_actualizar["costo"] = nuevo_costo
+                        if nuevo_stock > 0:
+                            datos_a_actualizar["stock"] = nuevo_stock
+                            
+                        if datos_a_actualizar:
+                            try:
+                                # Enviamos la actualización directo a Supabase
+                                supabase.table("productos").update(datos_a_actualizar).eq("rut_empresa", rut_actual).eq("codigo", str(cod_editar)).execute()
+                                st.success("✅ ¡Producto actualizado correctamente en todos los módulos!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar en Supabase: {e}")
+                        else:
+                            st.warning("⚠️ No ingresaste ningún valor nuevo para actualizar.")
                     else:
                         st.warning("⚠️ Selecciona un producto válido para editar.")
 

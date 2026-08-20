@@ -1860,36 +1860,47 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
 
     tab_inf1, tab_inf2 = st.tabs(["📑 Libro de Ventas (Salidas)", "📋 Historial de Compras (Entradas)"])
 
+    # ==========================================
+    # PESTAÑA 1: VENTAS (100% NUBE)
+    # ==========================================
     with tab_inf1:
-        st.markdown("### 💰 Registro de Salidas y Ventas")
-        archivos_excel = [f for f in os.listdir(ruta_negocio) if f.startswith("Libro_Ventas_") and f.endswith(".xlsx")]
-        if not archivos_excel:
-            st.info("ℹ️ Aún no hay registros de ventas para este negocio.")
-        else:
-            archivo_sel = st.selectbox("📅 Selecciona el Libro Mensual de Ventas:", sorted(archivos_excel, reverse=True), key="sel_ventas_kardex")
-            path_sel_v = os.path.join(ruta_negocio, archivo_sel)
-            df_v = pd.read_excel(path_sel_v)
-            if not df_v.empty:
-                if 'Total' in df_v.columns and 'TotalBoleta' not in df_v.columns:
-                    df_v['TotalBoleta'] = df_v['Total']
-                elif 'TotalBoleta' in df_v.columns and 'Total' in df_v.columns:
-                    df_v['TotalBoleta'] = df_v['TotalBoleta'].fillna(df_v['Total'])
-
-                df_v["FechaHora"] = pd.to_datetime(df_v["FechaHora"])
-                df_v["Fecha"] = df_v["FechaHora"].dt.date
+        st.markdown("### 💰 Registro de Salidas y Ventas (Nube)")
+        try:
+            # Nos conectamos a la tabla 'ventas' de Supabase (Ajusta "id_negocio" si en tu tabla se llama "rut_empresa")
+            res_ventas_nube = supabase.table("ventas").select("*").eq("id_negocio", rut_actual).execute()
+            
+            if res_ventas_nube.data:
+                df_v = pd.DataFrame(res_ventas_nube.data)
+                
+                # Normalizamos las fechas si existen
+                col_fecha = "fecha_hora" if "fecha_hora" in df_v.columns else ("FechaHora" if "FechaHora" in df_v.columns else None)
+                if col_fecha:
+                    df_v[col_fecha] = pd.to_datetime(df_v[col_fecha])
+                    df_v["Fecha_Corta"] = df_v[col_fecha].dt.date
+                
+                # Mostramos la tabla en la interfaz
                 st.dataframe(df_v, use_container_width=True)
                
-                if "TransaccionID" in df_v.columns and "TotalBoleta" in df_v.columns:
+                # Lógica para sumar el total real sin duplicar boletas
+                tot_v = 0.0
+                if "transaccion_id" in df_v.columns and "total_boleta" in df_v.columns:
+                    tot_v = df_v.drop_duplicates(subset=["transaccion_id"])["total_boleta"].sum()
+                elif "TransaccionID" in df_v.columns and "TotalBoleta" in df_v.columns:
                     tot_v = df_v.drop_duplicates(subset=["TransaccionID"])["TotalBoleta"].sum()
                 else:
-                    tot_v = df_v["Subtotal"].sum() if "Subtotal" in df_v.columns else 0.0
+                    tot_v = df_v["subtotal"].sum() if "subtotal" in df_v.columns else (df_v["Subtotal"].sum() if "Subtotal" in df_v.columns else 0.0)
                
-                st.metric(label="💰 Total Ingresos Netos Reales", value=f"${tot_v:,.2f}")
+                st.metric(label="💰 Total Ingresos Netos Reales (Nube)", value=f"${tot_v:,.2f}")
             else:
-                st.warning("⚠️ El libro seleccionado está vacío.")
+                st.info("ℹ️ Aún no hay registros de ventas en la nube para este negocio.")
+        except Exception as e:
+            st.error(f"⚠️ Error al cargar el historial de ventas desde Supabase: {e}")
 
+    # ==========================================
+    # PESTAÑA 2: COMPRAS (100% NUBE)
+    # ==========================================
     with tab_inf2:
-        st.markdown("### 🛒 Registro de Entradas y Compras (Nube - Supabase)")
+        st.markdown("### 🛒 Registro de Entradas y Compras (Nube)")
         try:
             res_compras_nube = supabase.table("compras").select("*").eq("id_negocio", rut_actual).execute()
             if res_compras_nube.data:
@@ -1897,7 +1908,7 @@ elif menu == "📈 Informes y Movimientos (Kardex)":
                 st.dataframe(df_c, use_container_width=True)
                 
                 # Calcular total invertido usando la columna 'costo_total' de Supabase
-                tot_c = df_c["costo_total"].sum() if "costo_total" in df_c.columns else 0.0
+                tot_c = df_c["costo_total"].sum() if "costo_total" in df_c.columns else (df_c["CostoTotal"].sum() if "CostoTotal" in df_c.columns else 0.0)
                 st.metric(label="💵 Total Invertido en Compras (Nube)", value=f"${tot_c:,.2f}")
             else:
                 st.info("ℹ️ Aún no hay registros de compras en la nube para este negocio.")

@@ -2794,50 +2794,109 @@ elif menu == "⚙️ Configuración General":
 
     tab1, tab2, tab3 = st.tabs(["👥 Usuarios y Cajas", "💳 Formas de Pago", "🖨️ Formato de Tickets e Impresión"])
 
-    with tab1:
-        st.markdown("### 👥 Creación y Gestión de Operadores del Negocio")
-        st.info("ℹ️ Registra nuevos operadores (cajeros, bodegueros, etc.) para que ingresen al sistema con su propia contraseña y rol asignado.")
+with tab1:
+        st.markdown("### 👥 Administración de Operadores y Permisos")
+        st.info("ℹ️ Crea usuarios, edita sus datos y define exactamente a qué módulos pueden acceder.")
 
         db_usuarios = cargar_usuarios_local(ruta_usuarios_local)
 
-        with st.form("form_crear_operador"):
-            col_u1, col_u2 = st.columns(2)
-            with col_u1:
-                nuevo_user_id = st.text_input("ID de Usuario / RUT (ej: cajero1)")
-                nuevo_nombre_usr = st.text_input("Nombre Completo o Descripción (ej: Juan Pérez - Caja 1)")
-            with col_u2:
-                nuevo_pass_usr = st.text_input("Contraseña de Acceso", type="password")
-                nuevo_rol_usr = st.selectbox("Rol / Permisos", options=["Cajero / Vendedor", "Bodeguero", "Administrador"])
-
-            btn_guardar_usr = st.form_submit_button("💾 Registrar Nuevo Operador", type="primary")
-
-            if btn_guardar_usr:
-                user_limpio = nuevo_user_id.strip()
-                if not user_limpio or not nuevo_pass_usr:
-                    st.warning("⚠️ Debes ingresar el ID de usuario y la contraseña.")
-                else:
-                    db_usuarios[user_limpio] = {
-                        "nombre": nuevo_nombre_usr or user_limpio,
-                        "password": nuevo_pass_usr.strip(),
-                        "rol": nuevo_rol_usr
-                    }
-                    guardar_usuarios_local(ruta_usuarios_local, db_usuarios)
-                    st.success(f"✨ ¡Usuario '{user_limpio}' creado con éxito bajo el rol de {nuevo_rol_usr}!")
-                    st.rerun()
-
-        st.divider()
-        st.markdown("### 📋 Operadores Registrados")
+        # --- 1. VISUALIZAR USUARIOS CREADOS ---
+        st.markdown("#### 📋 Usuarios Actuales")
         if db_usuarios:
             lista_tabla = []
             for uid, info in db_usuarios.items():
+                modulos_permitidos = info.get("modulos", [])
+                # Formatear el texto de módulos para que se vea bien en la tabla
+                modulos_txt = ", ".join(modulos_permitidos) if modulos_permitidos else "Ninguno asignado"
+                
                 lista_tabla.append({
                     "Usuario / RUT": uid,
-                    "Nombre": info.get("nombre"),
-                    "Rol Asignado": info.get("rol")
+                    "Nombre": info.get("nombre", "Sin Nombre"),
+                    "Rol Asignado": info.get("rol", "No definido"),
+                    "Módulos Habilitados": modulos_txt
                 })
             st.dataframe(pd.DataFrame(lista_tabla), use_container_width=True)
         else:
-            st.info("ℹ️ No hay operadores secundarios registrados todavía. El acceso principal opera con las credenciales globales de la empresa.")
+            st.info("ℹ️ No hay operadores secundarios registrados todavía.")
+
+        st.divider()
+
+        # --- 2. BUSCADOR Y EDICIÓN DE USUARIOS ---
+        st.markdown("#### ⚙️ Crear o Editar Permisos de Usuario")
+        
+        # Selector inteligente (Sirve para crear uno nuevo o buscar uno para editar)
+        opciones_usuarios = ["-- ✨ Crear Nuevo Usuario --"] + list(db_usuarios.keys())
+        usuario_seleccionado = st.selectbox("🔍 Buscar Usuario a Editar (o Crear Nuevo):", opciones_usuarios)
+        
+        # Variables por defecto dependiendo de lo que elija en el selectbox
+        es_nuevo = (usuario_seleccionado == "-- ✨ Crear Nuevo Usuario --")
+        
+        def_uid = "" if es_nuevo else usuario_seleccionado
+        def_nombre = "" if es_nuevo else db_usuarios[usuario_seleccionado].get("nombre", "")
+        def_pass = "" if es_nuevo else db_usuarios[usuario_seleccionado].get("password", "")
+        def_rol = "Cajero / Vendedor" if es_nuevo else db_usuarios[usuario_seleccionado].get("rol", "Cajero / Vendedor")
+        def_modulos = [] if es_nuevo else db_usuarios[usuario_seleccionado].get("modulos", [])
+
+        # Lista de absolutamente todos los módulos de tu ERP
+        todos_los_modulos = [
+            "🏠 Home / Bienvenida", "📊 Dashboard Ejecutivo", "📦 Inventario y Productos", 
+            "💰 Módulo de Ventas (POS)", "🛒 Registrar Compra (CPP)", "📉 Mermas y Ajustes", 
+            "📈 Informes y Movimientos (Kardex)", "⚠️ Control y Gestión de Inventario", 
+            "📊 Módulo de Finanzas", "📒 Cuadratura Diaria", "📑 Cuentas por Cobrar", 
+            "📈 Reportes y Analítica", "📚 Historial de Ventas", "🔄 Notas de Crédito", 
+            "🏦 Conciliación y Retiros Seguros", "⚙️ Configuración General"
+        ]
+
+        with st.form("form_crear_editar_operador"):
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                # Si está editando, bloqueamos el cambio de ID (es su llave única)
+                nuevo_user_id = st.text_input("ID de Usuario / RUT *", value=def_uid, disabled=not es_nuevo, help="Ej: cajero1. No se puede cambiar una vez creado.")
+                nuevo_nombre_usr = st.text_input("Nombre Completo *", value=def_nombre, placeholder="Ej: Juan Pérez")
+            with col_u2:
+                nuevo_pass_usr = st.text_input("Contraseña de Acceso *", type="password", value=def_pass)
+                # Truco para que el selectbox muestre el rol que ya tenía guardado
+                idx_rol = ["Cajero / Vendedor", "Bodeguero", "Administrador"].index(def_rol) if def_rol in ["Cajero / Vendedor", "Bodeguero", "Administrador"] else 0
+                nuevo_rol_usr = st.selectbox("Rol Principal", options=["Cajero / Vendedor", "Bodeguero", "Administrador"], index=idx_rol)
+
+            st.markdown("**🔐 Asignación de Permisos (Módulos)**")
+            modulos_seleccionados = st.multiselect(
+                "Selecciona a qué módulos podrá entrar este usuario:",
+                options=todos_los_modulos,
+                default=def_modulos,
+                help="Si el usuario intenta entrar a un módulo que no está seleccionado aquí, el sistema lo bloqueará."
+            )
+
+            # Cambiamos el texto del botón dependiendo si es nuevo o está editando
+            texto_boton = "💾 Registrar Nuevo Operador" if es_nuevo else "🔄 Guardar Cambios y Permisos"
+            btn_guardar_usr = st.form_submit_button(texto_boton, type="primary")
+
+            if btn_guardar_usr:
+                user_limpio = nuevo_user_id.strip()
+                if not user_limpio or not nuevo_pass_usr or not nuevo_nombre_usr:
+                    st.warning("⚠️ Debes ingresar el ID, el Nombre y la Contraseña.")
+                else:
+                    db_usuarios[user_limpio] = {
+                        "nombre": nuevo_nombre_usr.strip(),
+                        "password": nuevo_pass_usr.strip(),
+                        "rol": nuevo_rol_usr,
+                        "modulos": modulos_seleccionados # ¡Aquí se guardan los permisos exactos!
+                    }
+                    guardar_usuarios_local(ruta_usuarios_local, db_usuarios)
+                    
+                    if es_nuevo:
+                        st.success(f"✨ ¡Usuario '{user_limpio}' creado con éxito!")
+                    else:
+                        st.success(f"✅ ¡Permisos y datos actualizados para '{user_limpio}'!")
+                    st.rerun()
+
+        # Botón extra para eliminar al usuario si se equivocaron o lo despidieron (Solo visible al editar)
+        if not es_nuevo:
+            if st.button(f"🗑️ Eliminar usuario '{usuario_seleccionado}'", type="secondary"):
+                del db_usuarios[usuario_seleccionado]
+                guardar_usuarios_local(ruta_usuarios_local, db_usuarios)
+                st.success(f"Usuario {usuario_seleccionado} eliminado del sistema.")
+                st.rerun()
 
     with tab2:
         st.markdown("### 💳 Configuración de Formas de Pago Aceptadas")

@@ -1713,8 +1713,11 @@ elif menu == "📦 Inventario y Productos":
         st.info("💡 Este panel cruza tus Ventas (IVA Débito) con tus Compras (IVA Crédito) para calcular tu carga fiscal.")
 
         # --- 🧠 LECTURA DINÁMICA DE IVA DESDE LA CONFIGURACIÓN ---
-        # Leemos el IVA desde tu variable de sesión global (por defecto 19 si por alguna razón falla)
-        iva_configurado = float(st.session_state.get("config_iva", 19.0))
+        # Leemos el diccionario de configuración de la empresa actual
+        cfg_actual = st.session_state.get("config_ticket", {})
+        # Extraemos la tasa exacta que el usuario guardó (ej. 22.0)
+        iva_configurado = float(cfg_actual.get("iva_tasa", 19.0))
+        
         tasa_iva_decimal = iva_configurado / 100.0  # Ej: 22.0 -> 0.22
         factor_iva = 1.0 + tasa_iva_decimal         # Ej: 1.22
 
@@ -3023,8 +3026,8 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         venta_exitosa = True
                         
                         # --- 🧠 INTELIGENCIA TRIBUTARIA (IVA Dinámico) ---
-                        # Puedes conectar "config_iva" a tu panel de control (19 Chile, 22 Uruguay)
-                        tasa_iva_global = float(st.session_state.get("config_iva", 19.0)) / 100.0
+                        cfg_actual = st.session_state.get("config_ticket", {})
+                        tasa_iva_global = float(cfg_actual.get("iva_tasa", 19.0)) / 100.0
                         
                         # --- ☁️ SINCRONIZACIÓN CON SUPABASE ---
                         for item in st.session_state.carrito_ventas:

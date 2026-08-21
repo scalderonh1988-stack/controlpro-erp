@@ -1706,51 +1706,75 @@ elif menu == "📦 Inventario y Productos":
             st.error(f"Error conectando a clientes: {e}")
        
     # ==========================================
-    # PESTAÑA 3: PROVEEDORES (100% NUBE)
+    # PESTAÑA 3: IMPUESTOS (100% NUBE)
     # ==========================================
-    with tab_prov:
-        st.markdown("### 🚚 Administración de Proveedores (Nube)")
-       
-        with st.form("form_nuevo_proveedor", clear_on_submit=True):
-            st.markdown("#### Registrar Nuevo Proveedor")
-            col1, col2 = st.columns(2)
-            with col1:
-                rut_proveedor = st.text_input("RUT Proveedor *")
-                nombre_proveedor = st.text_input("Razón Social Proveedor *")
-                telefono_proveedor = st.text_input("Teléfono")
-            with col2:
-                correo_proveedor = st.text_input("Correo Electrónico")
-                nombre_vendedor = st.text_input("Nombre del Vendedor")
-           
-            if st.form_submit_button("💾 Guardar Proveedor en Nube"):
-                if rut_proveedor and nombre_proveedor:
-                    try:
-                        nuevo_prov = {
-                            "rut_empresa": str(rut_actual),
-                            "rut": str(rut_proveedor).strip(),
-                            "nombre": str(nombre_proveedor).strip(),
-                            "telefono": telefono_proveedor,
-                            "correo": correo_proveedor,
-                            "vendedor": nombre_vendedor
-                        }
-                        supabase.table("proveedores").insert(nuevo_prov).execute()
-                        st.success(f"✅ Proveedor '{nombre_proveedor}' guardado exitosamente.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al guardar: {e}")
-                else:
-                    st.warning("⚠️ RUT y Nombre del proveedor son obligatorios.")
+    with tab_inf3:
+        st.markdown("### 🏛️ Proyección de Impuestos (Acumulado Mensual)")
+        st.info("💡 Este panel cruza tus Ventas (IVA Débito) con tus Compras (IVA Crédito) para calcular tu carga fiscal.")
 
-        st.markdown("#### 📋 Listado de Proveedores")
-        try:
-            res_prov = supabase.table("proveedores").select("rut, nombre, telefono, correo, vendedor").eq("rut_empresa", rut_actual).execute()
-            df_prov = pd.DataFrame(res_prov.data)
-            if not df_prov.empty:
-                st.dataframe(df_prov, use_container_width=True, hide_index=True)
+        # --- 🧠 LECTURA DINÁMICA DE IVA DESDE LA CONFIGURACIÓN ---
+        # Leemos el IVA desde tu variable de sesión global (por defecto 19 si por alguna razón falla)
+        iva_configurado = float(st.session_state.get("config_iva", 19.0))
+        tasa_iva_decimal = iva_configurado / 100.0  # Ej: 22.0 -> 0.22
+        factor_iva = 1.0 + tasa_iva_decimal         # Ej: 1.22
+
+        # --- 1. CÁLCULO DE VENTAS (DÉBITO) ---
+        tot_neto_ventas, tot_iva_debito, tot_ila_ventas = 0.0, 0.0, 0.0
+        if 'df_v' in locals() and not df_v.empty:
+            tot_neto_ventas = df_v["neto"].sum() if "neto" in df_v.columns else 0.0
+            tot_iva_debito = df_v["iva"].sum() if "iva" in df_v.columns else 0.0
+            tot_ila_ventas = df_v["impuesto_especifico"].sum() if "impuesto_especifico" in df_v.columns else 0.0
+
+        st.markdown("#### 🔵 VENTAS (Impuestos Débito)")
+        col_v1, col_v2, col_v3 = st.columns(3)
+        with col_v1:
+            st.metric(label="📊 Ventas Netas", value=f"${tot_neto_ventas:,.0f}")
+        with col_v2:
+            # ¡Ahora el título se adapta al porcentaje configurado!
+            st.metric(label=f"🏛️ IVA Débito ({iva_configurado:g}%)", value=f"${tot_iva_debito:,.0f}")
+        with col_v3:
+            st.metric(label="🍷 Imp. Específicos Débito", value=f"${tot_ila_ventas:,.0f}")
+
+        st.divider()
+
+        # --- 2. CÁLCULO DE COMPRAS (CRÉDITO) ---
+        tot_neto_compras, tot_iva_credito, tot_ila_compras = 0.0, 0.0, 0.0
+        if 'df_c' in locals() and not df_c.empty:
+            # Detecta si ya tienes las columnas neto e iva en compras, o las calcula con tu IVA DINÁMICO
+            if "neto" in df_c.columns:
+                tot_neto_compras = df_c["neto"].sum()
             else:
-                st.info("No hay proveedores registrados en la nube todavía.")
-        except Exception as e:
-            st.error(f"Error conectando a proveedores: {e}")
+                tot_neto_compras = (df_c["costo_total"].sum() / factor_iva) if "costo_total" in df_c.columns else 0.0
+                
+            if "iva" in df_c.columns:
+                tot_iva_credito = df_c["iva"].sum()
+            else:
+                tot_iva_credito = tot_neto_compras * tasa_iva_decimal
+
+            tot_ila_compras = df_c["impuesto_especifico"].sum() if "impuesto_especifico" in df_c.columns else 0.0
+
+        st.markdown("#### 🟢 COMPRAS (Impuestos Crédito)")
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            st.metric(label="🛒 Compras Netas", value=f"${tot_neto_compras:,.0f}")
+        with col_c2:
+            # Título dinámico
+            st.metric(label=f"💳 IVA Crédito ({iva_configurado:g}%)", value=f"${tot_iva_credito:,.0f}")
+        with col_c3:
+            st.metric(label="🍷 Imp. Específicos Crédito", value=f"${tot_ila_compras:,.0f}")
+
+        st.divider()
+        
+        # --- 3. RESULTADO FINAL PARA EL FISCO ---
+        iva_a_pagar = tot_iva_debito - tot_iva_credito
+        iva_efectivo = iva_a_pagar if iva_a_pagar > 0 else 0.0
+        
+        total_impuestos = iva_efectivo + tot_ila_ventas
+        
+        st.markdown(f"### 🚨 Total a Pagar Fisco Aprox: **${total_impuestos:,.0f}**")
+        
+        if iva_a_pagar < 0:
+            st.success(f"🎉 Tienes un Remanente de IVA a favor para el próximo mes de: **${abs(iva_a_pagar):,.0f}**")
 
 # ----------------- SECCIÓN MERMAS Y AJUSTES DE INVENTARIO -----------------
 elif menu == "📉 Mermas y Ajustes":

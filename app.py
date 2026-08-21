@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import json
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
 import streamlit.components.v1 as components
 import sys
 import plotly.express as px
@@ -196,77 +196,112 @@ def generar_guia_pdf(cliente_nombre, cliente_rut, carrito):
    
     return pdf.output(dest='S').encode('latin1')
 
+# ----------------- SECCIÓN CUENTAS POR COBRAR (NUBE) -----------------
 def mostrar_modulo_cuentas_por_cobrar(ruta_negocio):
-    if st.button("⬅️ Volver al Home", use_container_width=True):
-        st.session_state.menu_seleccionado = "🏠 Home / Bienvenida"
-        st.rerun()
-        
-    st.markdown("### 📑 Gestión de Cuentas por Cobrar")
-    archivo_cxp = os.path.join(ruta_negocio, "Cuentas_por_Cobrar.xlsx")
-  
-    if not os.path.exists(archivo_cxp):
+    mostrar_encabezado_con_home("📑 Gestión de Cuentas por Cobrar")
+    rut_actual = st.session_state.get("negocio_seleccionado")
+
+    st.markdown("### 📊 Estado de Deudas Pendientes y Abonos")
+    st.info("💡 Este módulo está conectado en tiempo real a la caja registradora. Las ventas a crédito aparecen aquí automáticamente.")
+
+    # 1. Leer desde Supabase
+    df_cxp = pd.DataFrame()
+    try:
+        res_cxc = supabase.table("cuentas_por_cobrar").select("*").eq("rut_empresa", rut_actual).execute()
+        if res_cxc.data:
+            df_cxp = pd.DataFrame(res_cxc.data)
+    except Exception as e:
+        st.error(f"⚠️ Error cargando Cuentas por Cobrar desde la nube: {e}")
+
+    if df_cxp.empty:
         st.info("ℹ️ No hay registros de cuentas por cobrar todavía.")
-        return
-
-    df_cxp = pd.read_excel(archivo_cxp)
-    
-    if not df_cxp.empty:
-        col_venc = next((c for c in df_cxp.columns if 'vencimiento' in c.lower() or 'fecha' in c.lower() and c.lower() != 'fecha'), None)
-        
-        if col_venc:
-            hoy = pd.to_datetime(date.today())
-            fechas_venc = pd.to_datetime(df_cxp[col_venc], errors='coerce')
-            dias_atraso = (hoy - fechas_venc).dt.days
-            dias_atraso = dias_atraso.apply(lambda x: x if x > 0 else 0)
-            df_cxp["DiasAtraso"] = dias_atraso
-        else:
-            df_cxp["DiasAtraso"] = 0
-
-    cliente_filtro = st.text_input("🔍 Buscar por Cliente:")
-  
-    df_filtrado = df_cxp.copy()
-    if cliente_filtro:
-        df_filtrado = df_filtrado[df_filtrado["Cliente"].str.contains(cliente_filtro, case=False, na=False)]
-  
-    st.dataframe(df_filtrado, use_container_width=True)
-    
-    total_pendiente = df_filtrado['SaldoPendiente'].sum() if 'SaldoPendiente' in df_filtrado.columns else 0.0
-    st.write(f"Total pendiente: **${total_pendiente:,.2f}**")
-  
-    st.divider()
-    st.markdown("### 💳 Registrar Abono")
-    
-    clientes_deuda = []
-    if "SaldoPendiente" in df_cxp.columns and "Cliente" in df_cxp.columns:
-        clientes_deuda = df_cxp[df_cxp["SaldoPendiente"] > 0]["Cliente"].unique().tolist()
-   
-    if clientes_deuda:
-        cliente_seleccionado = st.selectbox("Selecciona el cliente para abonar:", options=clientes_deuda)
-        monto_abono = st.number_input("💵 Monto a abonar ($):", min_value=0.0, step=100.0)
-       
-        if st.button("✅ Registrar Abono", use_container_width=True):
-            if monto_abono > 0:
-                idx = df_cxp[df_cxp["Cliente"] == cliente_seleccionado].index[0]
-                saldo_actual = df_cxp.loc[idx, "SaldoPendiente"]
-              
-                if monto_abono >= saldo_actual:
-                    df_cxp = df_cxp.drop(idx)
-                    st.success(f"🎉 Deuda saldada por completo para {cliente_seleccionado}.")
-                else:
-                    df_cxp.loc[idx, "SaldoPendiente"] -= monto_abono
-                    if "Abono" in df_cxp.columns:
-                        df_cxp.loc[idx, "Abono"] += monto_abono
-                    st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${df_cxp.loc[idx, 'SaldoPendiente']:,.2f}")
-              
-                if "DiasAtraso" in df_cxp.columns:
-                    df_cxp = df_cxp.drop(columns=["DiasAtraso"])
-                    
-                df_cxp.to_excel(archivo_cxp, index=False)
-                st.rerun()
-            else:
-                st.warning("⚠️ Ingresa un monto mayor a cero.")
     else:
-        st.info("ℹ️ No hay clientes con deudas pendientes para registrar abonos.")
+        # 2. Calcular días de atraso en tiempo real
+        if "fecha_vencimiento" in df_cxp.columns:
+            hoy = pd.to_datetime(date.today())
+            fechas_venc = pd.to_datetime(df_cxp["fecha_vencimiento"], errors='coerce')
+            dias_atraso = (hoy - fechas_venc).dt.days
+            # Solo muestra atraso si los días son positivos y el estado es Pendiente
+            df_cxp["DiasAtraso"] = dias_atraso.apply(lambda x: x if x > 0 else 0)
+            df_cxp.loc[df_cxp["estado"] == "Pagada", "DiasAtraso"] = 0 
+        
+        # 3. Buscador inteligente
+        cliente_filtro = st.text_input("🔍 Buscar por Cliente o Folio de Venta:")
+        df_filtrado = df_cxp.copy()
+        if cliente_filtro:
+            filtro_c = df_filtrado["cliente"].str.contains(cliente_filtro, case=False, na=False)
+            filtro_f = df_filtrado["folio_venta"].str.contains(cliente_filtro, case=False, na=False)
+            df_filtrado = df_filtrado[filtro_c | filtro_f]
+        
+        # 4. Formatear la tabla visualmente
+        columnas_mostrar = ["folio_venta", "cliente", "monto_total", "saldo_pendiente", "fecha_emision", "fecha_vencimiento", "DiasAtraso", "estado"]
+        
+        # Validación de seguridad: asegurarse de que las columnas existan
+        columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
+        
+        df_display = df_filtrado[columnas_existentes].rename(columns={
+            "folio_venta": "Folio Venta",
+            "cliente": "Cliente",
+            "monto_total": "Monto Original",
+            "saldo_pendiente": "Saldo Pendiente",
+            "fecha_emision": "Emisión",
+            "fecha_vencimiento": "Vencimiento",
+            "DiasAtraso": "Días Atraso",
+            "estado": "Estado"
+        })
+        
+        st.dataframe(df_display, use_container_width=True)
+        
+        # Sumar solo lo que está pendiente
+        total_pendiente = df_filtrado.loc[df_filtrado["estado"] == "Pendiente", "saldo_pendiente"].sum()
+        st.metric(label="💰 Total Dinero en la Calle (Por Cobrar)", value=f"${total_pendiente:,.2f}")
+        
+        st.divider()
+        st.markdown("### 💳 Registrar Abono o Pago")
+        
+        # 5. Lógica de pagos (Filtra solo las deudas pendientes, usando .copy() para evitar warnings)
+        deudas_pendientes = df_cxp[df_cxp["estado"] == "Pendiente"].copy()
+        
+        if not deudas_pendientes.empty:
+            # Crea un listado descriptivo: Folio | Cliente | Saldo
+            deudas_pendientes["etiqueta"] = deudas_pendientes["folio_venta"] + " | " + deudas_pendientes["cliente"] + " | Saldo: $" + deudas_pendientes["saldo_pendiente"].astype(str)
+            opciones_deuda = deudas_pendientes["etiqueta"].tolist()
+            
+            deuda_seleccionada = st.selectbox("📌 Selecciona la boleta/factura a abonar:", options=opciones_deuda)
+            
+            # Rescata los datos de la fila seleccionada
+            folio_seleccionado = deuda_seleccionada.split(" | ")[0]
+            fila_deuda = deudas_pendientes[deudas_pendientes["folio_venta"] == folio_seleccionado].iloc[0]
+            
+            saldo_actual = float(fila_deuda["saldo_pendiente"])
+            id_deuda = fila_deuda["id"]
+            
+            monto_abono = st.number_input(f"💵 Monto a abonar (Máximo ${saldo_actual:,.2f}):", min_value=0.0, max_value=saldo_actual, step=100.0)
+            
+            if st.button("✅ Registrar Abono en la Nube", use_container_width=True, type="primary"):
+                if monto_abono > 0:
+                    nuevo_saldo = saldo_actual - monto_abono
+                    nuevo_estado = "Pagada" if nuevo_saldo <= 0 else "Pendiente"
+                    
+                    try:
+                        # Actualizamos la base de datos
+                        supabase.table("cuentas_por_cobrar").update({
+                            "saldo_pendiente": nuevo_saldo,
+                            "estado": nuevo_estado
+                        }).eq("id", int(id_deuda)).execute()
+                        
+                        if nuevo_estado == "Pagada":
+                            st.success(f"🎉 ¡Deuda saldada por completo para el folio {folio_seleccionado}! El registro se mantendrá en el historial como 'Pagada'.")
+                        else:
+                            st.success(f"🟢 Abono registrado con éxito. Nuevo saldo pendiente: ${nuevo_saldo:,.2f}")
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al registrar el abono en la nube: {e}")
+                else:
+                    st.warning("⚠️ Ingresa un monto mayor a cero.")
+        else:
+            st.info("ℹ️ ¡Excelente! No hay clientes con deudas pendientes.")
 
 def mostrar_modulo_registro_gastos(supabase):
     st.markdown("### 📋 Registro y Control de Gastos")
@@ -2993,13 +3028,17 @@ elif menu == "💰 Módulo de Ventas (POS)":
             df_temp = pd.DataFrame(st.session_state.carrito_ventas)
             total_venta = df_temp["Subtotal"].sum()
             st.info(f"💰 **Total a Pagar: ${total_venta:,.2f}**")
+            
             opciones_pago = list(st.session_state.get("formas_pago_erp", ["Efectivo"]))
-            for extra in ["Consignación", "Fiado", "Crédito"]:
+            for extra in ["Crédito", "Consignación", "Transferencia"]:
                 if extra not in opciones_pago:
                     opciones_pago.append(extra)
             forma_pago = st.selectbox("Selecciona la Forma de Pago:", options=opciones_pago)
        
             efectivo_recibido, cambio = total_venta, 0.0
+            dias_credito = 0  # Inicializador
+            
+            # --- Lógica de Interfaz según el Pago ---
             if forma_pago == "Efectivo":
                 efectivo_recibido = st.number_input("💵 Dinero Recibido ($):", min_value=0.0, value=float(total_venta), step=100.0)
                 if efectivo_recibido >= total_venta:
@@ -3007,6 +3046,12 @@ elif menu == "💰 Módulo de Ventas (POS)":
                     st.success(f"🟢 **Vuelto: ${cambio:,.2f}**")
                 else:
                     st.error("🔴 Monto insuficiente.")
+                    
+            elif forma_pago == "Crédito":
+                st.warning("⚖️ Esta venta se enviará automáticamente al módulo de Cuentas por Cobrar.")
+                dias_credito = st.number_input("⏳ Días de Crédito (Plazo para pagar):", min_value=1, value=30, step=1)
+                fecha_estimada = datetime.now() + timedelta(days=dias_credito)
+                st.info(f"📅 Fecha de vencimiento calculada: **{fecha_estimada.strftime('%d/%m/%Y')}**")
 
             st.divider()
             col_p1, col_p2 = st.columns(2)
@@ -3025,11 +3070,15 @@ elif menu == "💰 Módulo de Ventas (POS)":
                         
                         venta_exitosa = True
                         
-                        # --- 🧠 INTELIGENCIA TRIBUTARIA (IVA Dinámico) ---
+                        # --- 🧠 INTELIGENCIA TRIBUTARIA LIGADA A TU CONFIGURACIÓN ---
                         cfg_actual = st.session_state.get("config_ticket", {})
                         tasa_iva_global = float(cfg_actual.get("iva_tasa", 19.0)) / 100.0
                         
-                        # --- ☁️ SINCRONIZACIÓN CON SUPABASE ---
+                        total_neto_ticket = 0.0
+                        total_iva_ticket = 0.0
+                        total_ila_ticket = 0.0
+                        
+                        # --- ☁️ SINCRONIZACIÓN CON TABLA VENTAS ---
                         for item in st.session_state.carrito_ventas:
                             lineas_productos += f"- {item['Descripción']} (x{int(item['Cantidad'])}) ... ${item['Subtotal']:,.2f}\n"
                             
@@ -3041,19 +3090,22 @@ elif menu == "💰 Módulo de Ventas (POS)":
                                     nuevo_stock = stock_actual - float(item["Cantidad"])
                                     supabase.table("productos").update({"stock": nuevo_stock}).eq("rut_empresa", rut_actual).eq("codigo", str(item["Código"])).execute()
                             except Exception as e:
-                                st.warning(f"⚠️ Error descontando stock en Nube para {item['Código']}: {e}")
+                                st.warning(f"⚠️ Error descontando stock en Nube: {e}")
 
                             # 2. Cálculos Matemáticos de Impuestos
                             tasa_iva_item = 0.0 if item.get("Es Exento", False) else tasa_iva_global
                             tasa_ila_item = item.get("Tasa ILA", 0.0)
                             
                             monto_bruto = float(item["Subtotal"])
-                            # Fórmula: Bruto = Neto * (1 + IVA + ILA) -> Neto = Bruto / (1 + IVA + ILA)
                             neto_calculado = monto_bruto / (1.0 + tasa_iva_item + tasa_ila_item)
                             iva_calculado = neto_calculado * tasa_iva_item
                             ila_calculado = neto_calculado * tasa_ila_item
 
-                            # 3. Preparar registro final para la tabla VENTAS
+                            total_neto_ticket += neto_calculado
+                            total_iva_ticket += iva_calculado
+                            total_ila_ticket += ila_calculado
+
+                            # 3. Guardar línea de venta
                             registro_linea = {
                                 "folio": transaccion_id_actual,
                                 "rut_empresa": rut_actual,
@@ -3064,35 +3116,60 @@ elif menu == "💰 Módulo de Ventas (POS)":
                                 "codigo_producto": str(item["Código"]), 
                                 "detalle": str(item["Descripción"]),
                                 "cantidad": float(item["Cantidad"]), 
-                                "monto": monto_bruto,                 # Total pagado por el cliente
+                                "monto": monto_bruto,
                                 "metodo_pago": forma_pago,
-                                "neto": round(neto_calculado, 2),     # Dinero real tuyo
-                                "iva": round(iva_calculado, 2),       # IVA desglosado
-                                "impuesto_especifico": round(ila_calculado, 2) # ILA/IABA desglosado
+                                "neto": round(neto_calculado, 2),
+                                "iva": round(iva_calculado, 2),
+                                "impuesto_especifico": round(ila_calculado, 2)
                             }
                             
                             try:
                                 res_venta = supabase.table("ventas").insert(registro_linea).execute()
                                 if not res_venta.data:
-                                    st.error(f"❌ Supabase rechazó el registro para {item['Código']}.")
                                     venta_exitosa = False
                             except Exception as e:
-                                st.error(f"⚠️ Error registrando venta en Nube para {item['Código']}: {e}")
                                 venta_exitosa = False
 
                         if not venta_exitosa:
+                            st.error("❌ Ocurrió un error guardando la venta en Supabase.")
                             st.stop()
 
-                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE ---
-                        cfg = st.session_state.get('config_ticket', {'nombre_empresa': 'MI EMPRESA', 'rut_empresa': '00.000.000-0', 'direccion': 'Santiago', 'pie_pagina': 'Gracias por su preferencia'})
-                       
+                        # --- ☁️ NUEVO: SINCRONIZACIÓN CON CUENTAS POR COBRAR ---
+                        if forma_pago == "Crédito":
+                            fecha_vencimiento_str = (fecha_hora_actual + timedelta(days=dias_credito)).strftime("%Y-%m-%d")
+                            registro_cxc = {
+                                "rut_empresa": rut_actual,
+                                "folio_venta": transaccion_id_actual,
+                                "cliente": cliente_nombre if cliente_nombre else "Cliente General",
+                                "rut_cliente": cliente_rut if cliente_rut else "Sin RUT",
+                                "monto_total": float(total_venta),
+                                "saldo_pendiente": float(total_venta),
+                                "fecha_emision": fecha_hora_actual.strftime("%Y-%m-%d"),
+                                "fecha_vencimiento": fecha_vencimiento_str,
+                                "estado": "Pendiente"
+                            }
+                            try:
+                                supabase.table("cuentas_por_cobrar").insert(registro_cxc).execute()
+                            except Exception as e:
+                                st.error(f"⚠️ Error al enviar a Cuentas por Cobrar: {e}")
+
+                        # --- 🖨️ GENERACIÓN DEL COMPROBANTE CON DESGLOSE Y CRÉDITO ---
                         st.session_state.items_recibo_actual = st.session_state.carrito_ventas.copy()
+                        iva_porcentaje = float(cfg_actual.get("iva_tasa", 19.0))
+                        linea_ila = f"IMP. ESPECÍFICO: ${total_ila_ticket:,.2f}\n" if total_ila_ticket > 0 else ""
+                        
+                        # Mostramos el pago de forma inteligente
+                        info_pago = ""
+                        if forma_pago == 'Efectivo':
+                            info_pago = f"RECIBIDO: ${efectivo_recibido:,.2f}\nVUELTO: ${cambio:,.2f}"
+                        elif forma_pago == 'Crédito':
+                            info_pago = f"CONDICIÓN: A {dias_credito} DÍAS\nVENCE: {(fecha_hora_actual + timedelta(days=dias_credito)).strftime('%d/%m/%Y')}"
                         
                         texto_recibo = f"""
 ========================================
-       {cfg.get('nombre_empresa', 'MI EMPRESA')}
-       RUT: {cfg.get('rut_empresa', '00.000.000-0')}
-       {cfg.get('direccion', 'Santiago')}
+       {cfg_actual.get('nombre_empresa', 'MI EMPRESA')}
+       RUT: {cfg_actual.get('rut_empresa', '00.000.000-0')}
+       {cfg_actual.get('direccion', 'Santiago')}
 ========================================
 DOCUMENTO: {tipo_documento.upper()}
 FECHA: {fecha_hora_actual.strftime('%d/%m/%Y %H:%M:%S')}
@@ -3100,11 +3177,14 @@ TERMINAL: {caja_actual}
 ----------------------------------------
 {('CLIENTE: ' + cliente_nombre + ' | RUT: ' + cliente_rut + '\n----------------------------------------\n') if tipo_documento in ['Factura Electrónica', 'Guía de Despacho'] else ''}DETALLE:
 {lineas_productos}----------------------------------------
-TOTAL: ${total_venta:,.2f}
+SUBTOTAL NETO: ${total_neto_ticket:,.2f}
+IVA ({iva_porcentaje:g}%): ${total_iva_ticket:,.2f}
+{linea_ila}----------------------------------------
+TOTAL GENERAL: ${total_venta:,.2f}
 PAGO: {forma_pago.upper()}
-{('RECIBIDO: $' + f'{efectivo_recibido:,.2f}' + '\nVUELTO: $' + f'{cambio:,.2f}') if forma_pago == 'Efectivo' else ''}
+{info_pago}
 ========================================
-{cfg.get('pie_pagina', 'Gracias por su preferencia')}
+{cfg_actual.get('pie_pagina', 'Gracias por su preferencia')}
 ========================================"""
 
                         st.session_state.ultimo_recibo = texto_recibo

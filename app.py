@@ -2862,7 +2862,8 @@ elif menu == "⚙️ Configuración General":
                 "🏦 Conciliación y Retiros Seguros", "⚙️ Configuración General", "🔑 Control Maestro de Licencias"
             ]
 
-            with st.form("form_crear_editar_operador"):
+            # 👇 AQUÍ ESTÁ LA MAGIA: clear_on_submit=True limpia las celdas automáticamente
+            with st.form("form_crear_editar_operador", clear_on_submit=True):
                 col_u1, col_u2 = st.columns(2)
                 with col_u1:
                     nuevo_user_id = st.text_input("RUT del Usuario *", value=def_uid, disabled=not es_nuevo, help="RUT de inicio de sesión.")
